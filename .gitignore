@@ -10,7 +10,8 @@ bujji/bujji/config.json
 *tools/whisper.cpp/
 test_deskbot.sh
 realtimesst.log
-
+*bujji/bujji/tools/credentials.json
+*bujji/bujji/tools/gmail_token.json
 *tools/piper/en_US-lessac-medium.onnx
 *tools/piper/en_US-lessac-medium.onnx.json
 *tools/piper/voices/

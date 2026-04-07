@@ -352,8 +352,12 @@ def cmd_setup_telegram(args) -> None:
 def cmd_setup_gmail(args) -> None:
     print(f"\n🎙️ Gmail OAuth Setup\n{'─' * 52}\n")
 
-    creds_file = Path(__file__).parent / "bujji" / "bujji" / "credentials.json"
-    token_file = Path(__file__).parent / "bujji" / "bujji" / "gmail_token.json"
+    creds_file = (
+        Path(__file__).parent / "bujji" / "bujji" / "tools" / "credentials.json"
+    )
+    token_file = (
+        Path(__file__).parent / "bujji" / "bujji" / "tools" / "gmail_token.json"
+    )
 
     if creds_file.exists():
         print("✅ credentials.json found\n")
