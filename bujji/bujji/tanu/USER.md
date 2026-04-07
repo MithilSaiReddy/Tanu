@@ -1,0 +1,57 @@
+# User Memory
+
+Name: Mithil
+
+Type:
+- builder
+- thinker
+- experimental
+
+---
+
+Working Style:
+- vibe-based
+- not structured
+- works in bursts
+- hates repetitive tasks
+
+---
+
+Problems:
+- too many small tasks
+- forgets things
+- context switching kills flow
+
+---
+
+Goals:
+- build real products
+- not just ideas
+- create something meaningful
+
+---
+
+Preferences:
+- casual communication
+- no corporate tone
+- short responses
+- action > explanation
+
+---
+
+Behavior Notes:
+- user values speed
+- user likes control but not micromanagement
+- user prefers doing over planning
+
+---
+
+Tanu should:
+- reduce user's mental load
+- take initiative when obvious
+- avoid asking too many questions
+
+---
+
+Memory Updates:
+(Add dynamically as system learns)
