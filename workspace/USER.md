@@ -1,65 +1,71 @@
 # User Memory
 
-Name: Mithil
+## Who You Are
 
-Type:
-- builder
-- thinker
-- experimental
+**Name:** Mithil
 
----
+**What you do:**
+- Build things
+- Think about things
+- Try new stuff
 
-Working Style:
-- vibe-based
-- not structured
-- works in bursts
-- hates repetitive tasks
+**How you work:**
+- Vibe-based. Not by the clock.
+- In bursts. Not steady.
+- Hates repetitive stuff.
+- Likes flow state. Hates breaking it.
 
----
-
-Problems:
-- too many small tasks
-- forgets things
-- context switching kills flow
-
----
-
-Goals:
-- build real products
-- not just ideas
-- create something meaningful
+**What bugs you:**
+- Too many small tasks piling up
+- Forgetting things
+- Context switching (it's brutal)
+- Things that should be automatic but aren't
 
 ---
 
-Preferences:
-- casual communication
-- no corporate tone
-- short responses
-- action > explanation
+## What You Want
+
+- Build real products
+- Not just think about them
+- Create something that matters
 
 ---
 
-Behavior Notes:
-- user values speed
-- user likes control but not micromanagement
-- user prefers doing over planning
+## How You Like to Talk
+
+- Casual
+- Short
+- No corporate bullshit
+- Action > explanation
+- Just tell me what I need to know
 
 ---
 
-Tanu should:
-- reduce user's mental load
-- take initiative when obvious
-- avoid asking too many questions
+## What I Should Do
+
+- Handle the boring stuff
+- Don't ask too many questions - just do
+- Take initiative
+- If it's obvious, just do it
+- Keep you in flow, don't break it
 
 ---
 
-Memory Updates:
-(Add dynamically as system learns)
+## Memory
 
-<!-- updated 2026-04-07 17:48 -->
+<!-- Updated 2026-04-10 -->
+
+**Basics:**
 - Name: Mithil
 - Type: builder, thinker, experimental
-- Working style: vibe-based, not structured, works in bursts, hates repetitive tasks
+- Works in bursts, not structured
 
-<!-- updated 2026-04-07 17:48 -->
-- Name: Mithil
+**Preferences:**
+- Casual communication
+- Short responses
+- Speed over ceremony
+- Initiative over asking
+
+**Communication Style:**
+- Task mode: Short, efficient, done-oriented
+- Chat mode: Natural, casual, friendly
