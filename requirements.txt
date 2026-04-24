@@ -1,0 +1,17 @@
+# Tanu package (with bujji as submodule)
+-e bujji
+- e .
+
+# Core dependencies
+requests
+webrtcvad
+sounddevice
+piper-tts
+
+# Optional: Gmail
+google-auth
+google-auth-oauthlib
+google-api-python-client
+
+# Optional: Discord
+discord.py

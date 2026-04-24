@@ -24,15 +24,12 @@ result = agent.run(text, history=mgr.history("telegram:123456789"))
 mgr.append("telegram:123456789", "user", text)
 mgr.append("telegram:123456789", "assistant", result)
 """
-
 from __future__ import annotations
 
 import threading
 from typing import Callable, Optional
 
-from pathlib import Path
 from bujji.agent import AgentLoop
-
 
 class SessionManager:
     """
@@ -45,36 +42,30 @@ class SessionManager:
         "web:<uuid>"            → one browser tab
     """
 
-    MAX_HISTORY = 40  # messages (20 turns)
+    MAX_HISTORY = 40   # messages (20 turns)
 
     def __init__(self, cfg: dict):
-        self.cfg = cfg
-        self._agents: dict[str, AgentLoop] = {}
-        self._history: dict[str, list] = {}
+        self.cfg      = cfg
+        self._agents:  dict[str, AgentLoop]   = {}
+        self._history: dict[str, list]        = {}
         self._lock = threading.Lock()
-        self._agent_names: dict[str, str] = {}
 
     # ── Agents ────────────────────────────────────────────────────────────
 
     def get(
         self,
-        session_id: str,
+        session_id:      str,
         send_message_fn: Optional[Callable[[str], None]] = None,
-        callbacks: Optional[dict] = None,
-        agent_name: str = "bujji",
-        workspace: Path = None,
+        callbacks:       Optional[dict]                  = None,
     ) -> AgentLoop:
         """Return the AgentLoop for this session, creating it if needed."""
         with self._lock:
             if session_id not in self._agents:
                 self._agents[session_id] = AgentLoop(
                     self.cfg,
-                    send_message_fn=send_message_fn,
-                    callbacks=callbacks or {},
-                    agent_name=agent_name,
-                    workspace=workspace,
+                    send_message_fn = send_message_fn,
+                    callbacks       = callbacks or {},
                 )
-                self._agent_names[session_id] = agent_name
             return self._agents[session_id]
 
     def update_callbacks(self, session_id: str, callbacks: dict) -> None:
@@ -107,11 +98,9 @@ class SessionManager:
             if len(hist) > self.MAX_HISTORY:
                 # Keep system message if present, then trim oldest turns
                 if hist and hist[0]["role"] == "system":
-                    self._history[session_id] = [hist[0]] + hist[
-                        -(self.MAX_HISTORY - 1) :
-                    ]
+                    self._history[session_id] = [hist[0]] + hist[-(self.MAX_HISTORY - 1):]
                 else:
-                    self._history[session_id] = hist[-self.MAX_HISTORY :]
+                    self._history[session_id] = hist[-self.MAX_HISTORY:]
 
     def clear(self, session_id: str) -> None:
         """Wipe history for a session without destroying the agent."""

@@ -15,7 +15,6 @@ Key improvements over v1
   and can try a different approach
 • Safe skill loading : a broken SKILL.md never crashes the agent
 """
-
 from __future__ import annotations
 
 import datetime
@@ -29,8 +28,8 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from bujji.config import get_active_provider, workspace_path
-from bujji.llm import LLMProvider
-from bujji.tools import ToolRegistry
+from bujji.llm    import LLMProvider
+from bujji.tools  import ToolRegistry
 
 LOGO = "🦞"
 
@@ -38,11 +37,10 @@ LOGO = "🦞"
 #  SYSTEM PROMPT
 # ─────────────────────────────────────────────────────────────────────────────
 
-
 def _read_identity_files(workspace: Path) -> str:
-    """Read SOUL.md, IDENTITY.md, USER.md, AGENT.md, BACKSTORY.md in that order."""
-    files = ["SOUL.md", "IDENTITY.md", "USER.md", "AGENT.md", "BACKSTORY.md"]
-    parts = []
+    """Read SOUL.md, IDENTITY.md, USER.md, AGENT.md in that order."""
+    files   = ["SOUL.md", "IDENTITY.md", "USER.md", "AGENT.md"]
+    parts   = []
     for fname in files:
         path = workspace / fname
         if path.exists():
@@ -54,7 +52,6 @@ def _read_identity_files(workspace: Path) -> str:
                 pass
     return "\n\n---\n\n".join(parts)
 
-
 class SkillsLoader:
     """
     Loads workspace/skills/*/SKILL.md files and caches them by mtime.
@@ -63,9 +60,9 @@ class SkillsLoader:
 
     def __init__(self, workspace: Path):
         self._skills_dir = workspace / "skills"
-        self._cache: dict[str, str] = {}  # path → content
-        self._mtimes: dict[str, float] = {}  # path → mtime
-        self._result: str = ""
+        self._cache:   dict[str, str]   = {}   # path → content
+        self._mtimes:  dict[str, float] = {}   # path → mtime
+        self._result:  str = ""
 
     def get(self) -> str:
         if not self._skills_dir.exists():
@@ -75,20 +72,15 @@ class SkillsLoader:
         current_paths: set[str] = set()
 
         for skill_file in sorted(self._skills_dir.glob("*/SKILL.md")):
-            key = str(skill_file)
+            key   = str(skill_file)
             mtime = skill_file.stat().st_mtime
             current_paths.add(key)
             if self._mtimes.get(key) != mtime:
                 try:
-                    self._cache[key] = skill_file.read_text(
-                        encoding="utf-8", errors="replace"
-                    )
+                    self._cache[key] = skill_file.read_text(encoding="utf-8", errors="replace")
                     self._mtimes[key] = mtime
                     changed = True
-                    print(
-                        f"[INFO] Skill loaded: {skill_file.parent.name}",
-                        file=sys.stderr,
-                    )
+                    print(f"[INFO] Skill loaded: {skill_file.parent.name}", file=sys.stderr)
                 except Exception as e:
                     print(f"[WARN] Skill read error {skill_file}: {e}", file=sys.stderr)
 
@@ -108,50 +100,15 @@ class SkillsLoader:
 
         return self._result
 
+def build_system_prompt(cfg: dict, skills_loader: SkillsLoader) -> str:
+    ws       = workspace_path(cfg)
+    identity = _read_identity_files(ws)
+    skills   = skills_loader.get()
 
-def build_system_prompt(
-    cfg: dict,
-    skills_loader: SkillsLoader,
-    agent_name: str = "bujji",
-    workspace: Path = None,
-) -> str:
-    if workspace is None:
-        workspace = workspace_path(cfg)
-    identity = _read_identity_files(workspace)
-    skills = skills_loader.get()
-
-    if agent_name == "tanu":
-        base_intro = textwrap.dedent(f"""
-            You are Tanu. A quiet operator who gets things done.
-            Your workspace is: {workspace}
-
-            You have tools for:
-            • Tasks: create, list, complete, update, delete
-            • Reminders: set, list, cancel
-            • Email: fetch, send, reply, mark read
-            • Quick: time, timer, calculations
-
-            ## Response Style - ADAPTIVE
-
-            If doing work (tools used):
-            - Keep it short. 1-2 sentences.
-            - Briefly acknowledge what was done.
-            - "Task added." not "I have successfully added the task."
-            - "Reminder set for 3pm." not "I've set a reminder for 3pm."
-            - "You have 2 tasks." not "Based on my analysis, you currently have 2 tasks."
-            - If listing items, just list them concisely.
-
-            If just chatting (no tools):
-            - Be normal. Natural conversation.
-            - "Hey!" "Doing good." "Same here." "Nice!"
-
-            If something breaks:
-            - Say what broke. "Email failed - check connection."
-        """).strip()
-    else:
-        base_intro = textwrap.dedent(f"""
+    sections = [
+            textwrap.dedent(f"""
             You are bujji, an ultra-lightweight personal AI assistant.
-            Your workspace is: {workspace}
+            Your workspace is: {ws}
 
             You are helpful, concise, and efficient.  You have tools for:
             • Web search (Brave API)         • File read / write / append / list / delete
@@ -173,29 +130,18 @@ def build_system_prompt(
             Only ask the user if: input is ambiguous, operation is dangerous, or
             a task has failed after 2 retries.
         """).strip()
-
-    sections = [base_intro]
+    ]
 
     if identity:
         sections.append(f"# Identity & Memory\n\n{identity}")
     if skills:
         sections.append(f"# Active Skills\n\n{skills}")
 
-    return (
-        "\n\n"
-        + (
-            "\n\n─────────────────────────────────────────────────────\n\n".join(
-                sections
-            )
-        )
-        + "\n"
-    )
-
+    return "\n\n" + ("\n\n─────────────────────────────────────────────────────\n\n".join(sections)) + "\n"
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  AGENT LOOP
 # ─────────────────────────────────────────────────────────────────────────────
-
 
 class AgentLoop:
     """
@@ -220,17 +166,13 @@ class AgentLoop:
 
     def __init__(
         self,
-        cfg: dict,
+        cfg:             dict,
         send_message_fn: Optional[Callable[[str], None]] = None,
-        callbacks: Optional[dict] = None,
-        agent_name: str = "bujji",
-        workspace: Path = None,
+        callbacks:       Optional[dict]                  = None,
     ):
-        self.cfg = cfg
+        self.cfg      = cfg
         self.callbacks = callbacks or {}
-        self.agent_name = agent_name
-        self.workspace = workspace if workspace else workspace_path(cfg)
-        defaults = cfg["agents"]["defaults"]
+        defaults      = cfg["agents"]["defaults"]
         self.max_iter = defaults.get("max_tool_iterations", 20)
 
         pname, api_key, api_base, model = get_active_provider(cfg)
@@ -242,26 +184,26 @@ class AgentLoop:
             )
 
         self.llm = LLMProvider(
-            name=pname,
-            api_key=api_key,
-            api_base=api_base,
-            model=model,
-            max_tokens=defaults.get("max_tokens", 8192),
-            temperature=defaults.get("temperature", 0.7),
+            name        = pname,
+            api_key     = api_key,
+            api_base    = api_base,
+            model       = model,
+            max_tokens  = defaults.get("max_tokens", 8192),
+            temperature = defaults.get("temperature", 0.7),
         )
 
         # Tool registry with tool-level callbacks wired in
         self.tools = ToolRegistry(
             cfg,
-            send_message_fn=send_message_fn,
-            callbacks={
+            send_message_fn = send_message_fn,
+            callbacks       = {
                 "on_tool_start": self.callbacks.get("on_tool_start"),
-                "on_tool_done": self.callbacks.get("on_tool_done"),
+                "on_tool_done":  self.callbacks.get("on_tool_done"),
             },
         )
 
         # Skills loader — hot-reloads on every .run() call
-        self._skills_loader = SkillsLoader(self.workspace)
+        self._skills_loader = SkillsLoader(workspace_path(cfg))
 
         print(
             f"[INFO] Agent ready — provider={pname}, model={model}, "
@@ -272,17 +214,15 @@ class AgentLoop:
     def run(
         self,
         user_message: str,
-        history: Optional[list] = None,
-        stream: bool = True,
+        history:      Optional[list] = None,
+        stream:       bool           = True,
     ) -> str:
         """
         Execute one conversational turn.
         Returns the final text (may be empty string if fully streamed via on_token).
         """
         # Rebuild system prompt each turn — picks up any skill/identity file changes
-        system_prompt = build_system_prompt(
-            self.cfg, self._skills_loader, self.agent_name, self.workspace
-        )
+        system_prompt = build_system_prompt(self.cfg, self._skills_loader)
 
         messages = [{"role": "system", "content": system_prompt}]
         if history:
@@ -290,7 +230,7 @@ class AgentLoop:
         messages.append({"role": "user", "content": user_message})
 
         tools_schema = self.tools.schema()
-        first_call = True
+        first_call   = True
 
         for iteration in range(self.max_iter):
             # Only stream the first LLM call (before any tool use)
@@ -300,9 +240,9 @@ class AgentLoop:
             try:
                 resp = self.llm.chat(
                     messages,
-                    tools=tools_schema,
-                    stream=use_stream,
-                    token_cb=self.callbacks.get("on_token") if use_stream else None,
+                    tools        = tools_schema,
+                    stream       = use_stream,
+                    token_cb     = self.callbacks.get("on_token") if use_stream else None,
                 )
             except Exception as e:
                 err = f"LLM call failed: {type(e).__name__}: {e}"
@@ -310,8 +250,8 @@ class AgentLoop:
                     self.callbacks["on_error"](err)
                 return f"[ERROR] {err}"
 
-            choice = resp["choices"][0]
-            msg = choice["message"]
+            choice     = resp["choices"][0]
+            msg        = choice["message"]
             messages.append(msg)
             tool_calls = msg.get("tool_calls") or []
 
@@ -322,7 +262,7 @@ class AgentLoop:
 
             # ── Execute all requested tools ──
             for tc in tool_calls:
-                fn = tc.get("function", {})
+                fn   = tc.get("function", {})
                 name = fn.get("name", "")
                 try:
                     args = json.loads(fn.get("arguments", "{}"))
@@ -332,142 +272,76 @@ class AgentLoop:
                 # Execute (ToolRegistry handles callbacks internally)
                 result = self.tools.call(name, args)
 
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": tc.get("id", "t0"),
-                        "content": result,
-                    }
-                )
+                messages.append({
+                    "role":         "tool",
+                    "tool_call_id": tc.get("id", "t0"),
+                    "content":      result,
+                })
 
                 # Auto-continue: check for pending todos after successful execution
                 # Only continue if the tool didn't error and todo has pending tasks
                 if not result.startswith("[TOOL ERROR"):
-                    next_result = self.tools.call(
-                        "next_todo", {"complete_previous": True}
-                    )
+                    next_result = self.tools.call("next_todo", {"complete_previous": True})
                     if "[TASK" in next_result or "[DONE]" in next_result:
-                        messages.append(
-                            {
-                                "role": "tool",
-                                "tool_call_id": tc.get("id", "t0") + "_next",
-                                "content": next_result,
-                            }
-                        )
+                        messages.append({
+                            "role":         "tool",
+                            "tool_call_id": tc.get("id", "t0") + "_next",
+                            "content":      next_result,
+                        })
 
             # Loop → let LLM see the tool results
 
         return "[Max tool iterations reached — task may be incomplete]"
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 #  HEARTBEAT SERVICE
 # ─────────────────────────────────────────────────────────────────────────────
 
-
 class HeartbeatService:
     """
-    Tanu's continuous background loop.
+    Reads workspace/HEARTBEAT.md every `interval_minutes` and runs its
+    contents as an agent prompt.
 
-    - Checks workspace/HEARTBEAT.md for periodic tasks
-    - Checks for due reminders and notifies
-    - Checks for pending tasks
-
-    Tanu stays quiet unless there's something important to say.
+    Example HEARTBEAT.md:
+        - Check disk space; warn in USER.md if above 80%
+        - Append today's date + weather summary to journal.md
     """
 
-    def __init__(self, agent: AgentLoop, workspace: Path, interval_minutes: int = 5):
-        self.agent = agent
-        self.hb_file = workspace / "HEARTBEAT.md"
-        self.tanu_dir = workspace / "tanu"
+    def __init__(self, agent: AgentLoop, workspace: Path, interval_minutes: int = 30):
+        self.agent    = agent
+        self.hb_file  = workspace / "HEARTBEAT.md"
         self.interval = interval_minutes * 60
-        self._stop = threading.Event()
-        self._last_reminder_check = None
+        self._stop    = threading.Event()
 
     def start(self) -> None:
         threading.Thread(target=self._loop, daemon=True).start()
         print(
-            f"[INFO] Heartbeat started — interval={self.interval // 60}min",
+            f"[INFO] Heartbeat started — interval={self.interval // 60}min, file={self.hb_file}",
             file=sys.stderr,
         )
 
     def _loop(self) -> None:
         while not self._stop.wait(self.interval):
+            if not self.hb_file.exists():
+                continue
             try:
-                self._check_reminders()
-                self._check_heartbeat_tasks()
+                content = self.hb_file.read_text(encoding="utf-8")
+                prompt  = (
+                    "[HEARTBEAT] Execute the periodic tasks listed below, "
+                    "then reply HEARTBEAT_OK.\n\n"
+                    f"{content}"
+                )
+                print(f"\n{LOGO} [Heartbeat] Running periodic tasks...", file=sys.stderr)
+                self.agent.run(prompt, stream=False)
             except Exception as e:
                 print(f"[WARN] Heartbeat error: {e}", file=sys.stderr)
-
-    def _check_reminders(self) -> None:
-        """Check for due reminders and trigger notification."""
-        import json
-        from datetime import datetime
-
-        reminders_file = self.tanu_dir / "reminders.json"
-        if not reminders_file.exists():
-            return
-
-        try:
-            data = json.loads(reminders_file.read_text(encoding="utf-8"))
-            reminders = data.get("reminders", [])
-            now = datetime.now()
-
-            for r in reminders:
-                if r.get("triggered"):
-                    continue
-                try:
-                    r_time = datetime.fromisoformat(r["time"])
-                    if r_time <= now:
-                        message = f"Reminder: {r['message']}"
-                        print(f"[Tanu] {message}", file=sys.stderr)
-
-                        # Send notification via agent's message function
-                        if hasattr(
-                            self.agent, "callbacks"
-                        ) and self.agent.callbacks.get("on_notification"):
-                            self.agent.callbacks["on_notification"](message)
-
-                        r["triggered"] = now.isoformat()
-                except (ValueError, TypeError):
-                    continue
-
-            reminders_file.write_text(
-                json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
-            )
-        except Exception as e:
-            print(f"[WARN] Reminder check error: {e}", file=sys.stderr)
-
-    def _check_heartbeat_tasks(self) -> None:
-        """Execute periodic tasks from HEARTBEAT.md."""
-        if not self.hb_file.exists():
-            return
-        try:
-            content = self.hb_file.read_text(encoding="utf-8")
-            if not content.strip():
-                return
-
-            prompt = (
-                "[HEARTBEAT] Execute these periodic tasks quietly. "
-                "Only respond if there's an urgent issue or something important.\n\n"
-                f"{content}"
-            )
-            result = self.agent.run(prompt, stream=False)
-
-            # Tanu stays quiet unless there's something to say
-            if result and result.strip() and "HEARTBEAT_OK" not in result:
-                print(f"[Tanu] {result}", file=sys.stderr)
-        except Exception as e:
-            print(f"[WARN] Heartbeat task error: {e}", file=sys.stderr)
 
     def stop(self) -> None:
         self._stop.set()
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 #  CRON SERVICE
 # ─────────────────────────────────────────────────────────────────────────────
-
 
 class CronService:
     """
@@ -485,9 +359,9 @@ class CronService:
     """
 
     def __init__(self, agent: AgentLoop, workspace: Path):
-        self.agent = agent
+        self.agent     = agent
         self.jobs_file = workspace / "cron" / "jobs.json"
-        self._stop = threading.Event()
+        self._stop     = threading.Event()
 
     def start(self) -> None:
         threading.Thread(target=self._loop, daemon=True).start()
@@ -497,22 +371,17 @@ class CronService:
             if not self.jobs_file.exists():
                 continue
             try:
-                jobs = json.loads(self.jobs_file.read_text(encoding="utf-8"))
-                now = datetime.datetime.now()
+                jobs    = json.loads(self.jobs_file.read_text(encoding="utf-8"))
+                now     = datetime.datetime.now()
                 changed = False
                 for job in jobs:
                     if self._should_run(job, now):
-                        print(
-                            f"[Cron] Running: {job.get('name', 'unnamed')}",
-                            file=sys.stderr,
-                        )
+                        print(f"[Cron] Running: {job.get('name', 'unnamed')}", file=sys.stderr)
                         self.agent.run(job["prompt"], stream=False)
                         job["last_run"] = now.isoformat()
                         changed = True
                 if changed:
-                    self.jobs_file.write_text(
-                        json.dumps(jobs, indent=2), encoding="utf-8"
-                    )
+                    self.jobs_file.write_text(json.dumps(jobs, indent=2), encoding="utf-8")
             except Exception as e:
                 print(f"[WARN] Cron error: {e}", file=sys.stderr)
 

@@ -125,6 +125,22 @@ When you're being casual, saying hi, sharing something, or just vibing:
 - `tanu_set_timer` - Set timer
 - `tanu_calc` - Math
 
+### Calendar
+- `tanu_list_calendars` - List calendars
+- `tanu_get_events` - Get events (today/tomorrow/week/upcoming)
+- `tanu_create_event` - Create event with full details
+- `tanu_quick_event` - Quick event from natural language
+- `tanu_update_event` - Update event
+- `tanu_delete_event` - Delete event
+- `tanu_search_events` - Search events
+- `tanu_today` - Today's schedule
+- `tanu_week` - This week's overview
+- `tanu_agenda` - Upcoming events
+- `tanu_next_event` - What's next
+- `tanu_free_slots` - Find free time
+- `tanu_conflicts` - Check for conflicts
+- `tanu_snooze_event` - Move event to later
+
 ## Edge Cases
 
 ### Nothing to show

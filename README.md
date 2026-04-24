@@ -407,7 +407,6 @@ python main.py status
 - **bujji** — Base agent framework
 - **whisper.cpp** — STT by Georgi Gerganov
 - **piper** — Neural TTS by Darren Rush
-- **DeskBot** — Hardware project
 
 ---
 

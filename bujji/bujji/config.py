@@ -8,81 +8,43 @@ import json
 from pathlib import Path
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  PATHS
+#  PATHS - Use local Tanu folder
 # ─────────────────────────────────────────────────────────────────────────────
 
-CONFIG_DIR = Path.home() / ".bujji"
-CONFIG_FILE = CONFIG_DIR / "config.json"
-WORKSPACE_DEFAULT = CONFIG_DIR / "workspace"
-
-
-def get_repo_workspace() -> Path:
-    """Get the repo workspace path (where main.py lives + /workspace)."""
+def _get_tanu_root() -> Path:
+    """Get Tanu repo root (parent of bujji folder)."""
     import os
-
     script_dir = Path(os.path.dirname(os.path.abspath(__file__)))
-    repo_root = script_dir.parent.parent
-    return repo_root / "workspace"
+    return script_dir.parent.parent
 
+CONFIG_DIR        = _get_tanu_root() / "config"
+CONFIG_FILE       = CONFIG_DIR / "config.json"
+WORKSPACE_DEFAULT = _get_tanu_root() / "workspace"
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  DEFAULT CONFIG SCHEMA
 # ─────────────────────────────────────────────────────────────────────────────
 
 DEFAULT_CONFIG = {
-    "active_provider": "",  # name of the provider currently in use
+    "active_provider": "",   # name of the provider currently in use
     "agents": {
         "defaults": {
-            "workspace": str(WORKSPACE_DEFAULT),
-            "model": "",
-            "max_tokens": 8192,
-            "temperature": 0.7,
-            "max_tool_iterations": 20,
+            "workspace":             str(WORKSPACE_DEFAULT),
+            "model":                 "",
+            "max_tokens":            8192,
+            "temperature":           0.7,
+            "max_tool_iterations":   20,
             "restrict_to_workspace": False,
         }
     },
     "providers": {},
     "channels": {
         "telegram": {"enabled": False, "token": "", "allow_from": []},
-        "discord": {"enabled": False, "token": "", "allow_from": []},
+        "discord":  {"enabled": False, "token": "", "allow_from": []},
     },
     "tools": {
-        "web": {"search": {"api_key": "", "max_results": 5}},
-    },
-    "deskbot": {
-        "stt_model": "tiny.en",
-        "stt_language": "en",
-        "stt_compute_type": "int8_float32",
-        "silero_sensitivity": 0.4,
-        "webrtc_sensitivity": 2,
-        "post_speech_silence_sec": 0.4,
-        "whisper_bin": "/home/mithil/Documents/Work/tanu/tools/whisper.cpp/build/bin/main",
-        "whisper_model": "/home/mithil/Documents/Work/tanu/tools/whisper.cpp/models/ggml-tiny.en.bin",
-        "whisper_threads": 4,
-        "piper_bin": "/home/mithil/Documents/Work/tanu/venv/bin/piper",
-        "piper_model": "/home/mithil/Documents/Work/tanu/tools/piper/en_US-lessac-medium.onnx",
-        "audio_input_device": None,
-        "audio_output_device": None,
-        "display_type": "none",
-        "display_width": 240,
-        "display_height": 240,
-        "interrupt_on_speech": True,
-        "use_subprocess": True,
-    },
-    "tanu": {
-        "voice_enabled": True,
-        "stream_tts": True,
-        "first_token_timeout": 1.0,
-        "channels": {
-            "telegram": {"enabled": False, "notify_on_reminder": True},
-            "discord": {"enabled": False, "notify_on_reminder": True},
-        },
-        "task_defaults": {
-            "priority": "medium",
-        },
-        "reminder": {
-            "check_interval": 30,
-            "default_channel": "both",
+        "web": {
+            "search": {"api_key": "", "max_results": 5}
         },
     },
 }
@@ -93,18 +55,15 @@ DEFAULT_CONFIG = {
 
 # name -> (api_base_url, default_model)
 PROVIDER_DEFAULTS = {
-    "openrouter": ("https://openrouter.ai/api/v1", "openai/gpt-4o-mini"),
-    "openai": ("https://api.openai.com/v1", "gpt-4o-mini"),
-    "anthropic": ("https://api.anthropic.com/v1", "claude-3-haiku-20240307"),
-    "groq": ("https://api.groq.com/openai/v1", "llama3-8b-8192"),
-    "google": (
-        "https://generativelanguage.googleapis.com/v1beta/openai",
-        "gemini-2.0-flash",
-    ),
-    "mistral": ("https://api.mistral.ai/v1", "mistral-small-latest"),
-    "zhipu": ("https://open.bigmodel.cn/api/paas/v4", "glm-4-flash"),
-    "deepseek": ("https://api.deepseek.com/v1", "deepseek-chat"),
-    "ollama": ("http://localhost:11434/v1", "llama3.2"),
+    "openrouter": ("https://openrouter.ai/api/v1",                            "openai/gpt-4o-mini"),
+    "openai":     ("https://api.openai.com/v1",                               "gpt-4o-mini"),
+    "anthropic":  ("https://api.anthropic.com/v1",                            "claude-3-haiku-20240307"),
+    "groq":       ("https://api.groq.com/openai/v1",                         "llama3-8b-8192"),
+    "google":     ("https://generativelanguage.googleapis.com/v1beta/openai", "gemini-2.0-flash"),
+    "mistral":    ("https://api.mistral.ai/v1",                               "mistral-small-latest"),
+    "zhipu":      ("https://open.bigmodel.cn/api/paas/v4",                   "glm-4-flash"),
+    "deepseek":   ("https://api.deepseek.com/v1",                            "deepseek-chat"),
+    "ollama":     ("http://localhost:11434/v1",                               "llama3.2"),
 }
 
 # Popular model suggestions shown during onboard
@@ -165,25 +124,8 @@ POPULAR_MODELS = {
 #  LOAD / SAVE
 # ─────────────────────────────────────────────────────────────────────────────
 
-
 def load_config() -> dict:
     """Load config from disk, deep-merging with defaults for missing keys."""
-    local_config = Path(__file__).parent / "config.json"
-    if local_config.exists():
-        with open(local_config, encoding="utf-8") as f:
-            on_disk = json.load(f)
-        merged = copy.deepcopy(DEFAULT_CONFIG)
-        _deep_merge(merged, on_disk)
-        return merged
-
-    ws_config = get_repo_workspace() / "config.json"
-    if ws_config.exists():
-        with open(ws_config, encoding="utf-8") as f:
-            on_disk = json.load(f)
-        merged = copy.deepcopy(DEFAULT_CONFIG)
-        _deep_merge(merged, on_disk)
-        return merged
-
     if not CONFIG_FILE.exists():
         return copy.deepcopy(DEFAULT_CONFIG)
     with open(CONFIG_FILE, encoding="utf-8") as f:
@@ -194,9 +136,9 @@ def load_config() -> dict:
 
 
 def save_config(cfg: dict) -> None:
-    """Persist config to local config.json (bujji/bujji/config.json)."""
-    local_config = Path(__file__).parent / "config.json"
-    with open(local_config, "w", encoding="utf-8") as f:
+    """Persist config to ~/.bujji/config.json."""
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(cfg, f, indent=2)
 
 
@@ -212,7 +154,6 @@ def _deep_merge(base: dict, override: dict) -> None:
 #  HELPERS
 # ─────────────────────────────────────────────────────────────────────────────
 
-
 def get_active_provider(cfg: dict):
     """
     Return (provider_name, api_key, api_base, model) for the configured
@@ -223,7 +164,7 @@ def get_active_provider(cfg: dict):
       2. First provider in cfg["providers"] with a valid api_key (legacy fallback)
     """
     model_override = cfg["agents"]["defaults"].get("model", "")
-    providers = cfg.get("providers", {})
+    providers      = cfg.get("providers", {})
 
     # Build ordered list: preferred provider first, then the rest
     preferred = cfg.get("active_provider", "")
@@ -233,7 +174,7 @@ def get_active_provider(cfg: dict):
         ordered = list(providers)
 
     for pname in ordered:
-        pconf = providers[pname]
+        pconf   = providers[pname]
         api_key = pconf.get("api_key", "")
         if not api_key:
             continue
@@ -250,3 +191,11 @@ def get_active_provider(cfg: dict):
 def workspace_path(cfg: dict) -> Path:
     ws = cfg["agents"]["defaults"].get("workspace", str(WORKSPACE_DEFAULT))
     return Path(ws).expanduser()
+
+
+def get_repo_workspace() -> Path:
+    """Get the repo workspace path (where main.py lives + /workspace)."""
+    import os
+    script_dir = Path(os.path.dirname(os.path.abspath(__file__)))
+    repo_root = script_dir.parent.parent
+    return repo_root / "workspace"

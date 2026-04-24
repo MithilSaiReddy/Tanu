@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tanu"
+version = "2.0.0"
+description = "Voice assistant for DeskBot"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [
+    {name = "Mithil Reddy", email = "mithilsaireddy@gmail.com"}
+]
+keywords = ["voice", "assistant", "deskbot", "llm"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    "requests",
+    "webrtcvad",
+    "sounddevice",
+    "piper-tts",
+]
+
+[project.optional-dependencies]
+gmail = [
+    "google-auth",
+    "google-auth-oauthlib",
+    "google-api-python-client",
+]
+discord = [
+    "discord.py",
+]
+dev = [
+    "pytest",
+    "ruff",
+]
+
+[project.scripts]
+tanu = "tanu.cli:main"
+
+[tool.setuptools.packages]
+find = {"where": ["src"]}
+
+[project.urls]
+Homepage = "https://github.com/MithilSaiReddy/Tanu"
+Repository = "https://github.com/MithilSaiReddy/Tanu"
