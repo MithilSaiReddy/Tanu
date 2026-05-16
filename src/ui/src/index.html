@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="styles.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tanu</title>
+    <script type="module" src="/main.js" defer></script>
+  </head>
+  <body class="mode-float">
+    <div id="float-circle">
+      <img id="circle-logo" src="assets/1.svg" alt=""
+           onload="this.dataset.loaded='1'"
+           onerror="this.style.display='none'">
+      <span class="circle-icon">T</span>
+    </div>
+
+    <div id="chat-panel">
+      <div id="chat-header">
+        <div class="header-left">
+          <span class="header-avatar-wrap">
+            <img class="avatar-logo" src="assets/1.svg" alt=""
+                 onload="this.dataset.loaded='1'"
+                 onerror="this.style.display='none'">
+            <span class="header-avatar">T</span>
+          </span>
+          <span class="header-title">Tanu</span>
+        </div>
+        <button id="btn-close" title="Minimize">_</button>
+      </div>
+
+      <div id="messages"></div>
+
+      <div id="chat-input-area">
+        <div id="status-bar">
+          <span id="status-dot" class="dot-offline"></span>
+          <span id="status-text">Connecting...</span>
+        </div>
+        <div id="input-row">
+          <input id="msg-input" type="text" placeholder="Message Tanu..." autocomplete="off" />
+          <button id="btn-send">&#10148;</button>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

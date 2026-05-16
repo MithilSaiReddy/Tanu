@@ -7,6 +7,7 @@ Usage:
     python main.py tanu --text   # Text mode (no audio)
     python main.py onboard        # First-time setup
     python main.py serve         # Web UI
+    python main.py desk          # Floating desktop app (Tauri)
     python main.py agent        # Chat in terminal
 
 Requirements:
@@ -27,8 +28,12 @@ for p in _paths_to_add:
         sys.path.insert(0, p)
 
 import argparse
+import multiprocessing
+import subprocess
 import threading
 import time
+import signal
+import webbrowser
 
 from bujji import LOGO as BUJJI_LOGO
 from bujji.config import load_config, workspace_path, get_active_provider
@@ -162,6 +167,79 @@ def cmd_status(args):
     print(f"  Web UI: python main.py serve → http://localhost:7337\n")
 
 
+def _run_server(port: int):
+    """Run the bujji server in a subprocess (no browser)."""
+    import webbrowser as _wb
+    _wb.open = lambda url: None  # suppress bujji's webbrowser.open
+    from bujji.config import load_config
+    from bujji.server import run_server
+    cfg = load_config()
+    run_server(cfg, port=port)
+
+
+def cmd_desk(args):
+    TARGET_DIR = Path(__file__).parent / "src" / "ui"
+    TAURI_BINS = [
+        TARGET_DIR / "src-tauri" / "target" / "release" / "tanu",
+        TARGET_DIR / "src-tauri" / "target" / "debug" / "tanu",
+    ]
+
+    tauri_bin = None
+    for b in TAURI_BINS:
+        if b.exists():
+            tauri_bin = b
+            break
+
+    if not tauri_bin:
+        print("Tauri binary not found. Build it first:")
+        print()
+        print("  1. Install system dependencies (requires sudo):")
+        print("     sudo apt install build-essential libwebkit2gtk-4.1-dev \\")
+        print("       libgtk-3-dev libayatana-appindicator3-dev \\")
+        print("       librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev")
+        print()
+        print("  2. Install tauri-cli:")
+        print("     cargo install tauri-cli --version \"^2\"")
+        print()
+        print("  3. Build the desktop app:")
+        print(f"     cd {TARGET_DIR}")
+        print("     cargo tauri build")
+        print()
+        print("  4. Then run: python main.py desk")
+        return
+
+    print(f"🎙️ Starting server + desktop app...")
+    print(f"   Server:  http://localhost:7337")
+    print(f"   Hotkey:  Ctrl+Shift+T")
+    print(f"   Binary:  {tauri_bin}")
+
+    port = getattr(args, "port", 7337) or 7337
+    server_proc = multiprocessing.Process(target=_run_server, args=(port,), daemon=True)
+    server_proc.start()
+
+    tauri_proc = subprocess.Popen([str(tauri_bin)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    def cleanup(sig=None, frame=None):
+        print("\nShutting down...")
+        tauri_proc.terminate()
+        server_proc.terminate()
+        try:
+            tauri_proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            tauri_proc.kill()
+        server_proc.join(timeout=5)
+        if server_proc.is_alive():
+            server_proc.kill()
+
+    signal.signal(signal.SIGINT, cleanup)
+    signal.signal(signal.SIGTERM, cleanup)
+
+    try:
+        tauri_proc.wait()
+    except KeyboardInterrupt:
+        cleanup()
+
+
 def main():
     parser = argparse.ArgumentParser(prog="tanu", description="🎙️ Voice assistant for DeskBot")
     sub = parser.add_subparsers(dest="command")
@@ -169,6 +247,7 @@ def main():
     sub.add_parser("onboard", help="First-time setup")
     sub.add_parser("serve", help="Web UI")
     sub.add_parser("status", help="Show status")
+    sub.add_parser("desk", help="Floating desktop app (Tauri)")
 
     p_tanu = sub.add_parser("tanu", help="Start voice assistant")
     p_tanu.add_argument("--text", dest="text_mode", action="store_true", help="Text mode")
@@ -181,6 +260,7 @@ def main():
         "tanu": cmd_tanu,
         "serve": cmd_serve,
         "status": cmd_status,
+        "desk": cmd_desk,
     }
 
     if args.command in cmds:

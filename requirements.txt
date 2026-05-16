@@ -1,6 +1,6 @@
-# Tanu package (with bujji as submodule)
+# Tanu package (bujji is now a git submodule — init with: git submodule update --init)
 -e bujji
-- e .
+-e .
 
 # Core dependencies
 requests
