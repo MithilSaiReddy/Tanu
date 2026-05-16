@@ -37,6 +37,7 @@ import webbrowser
 
 from bujji import LOGO as BUJJI_LOGO
 from bujji.config import load_config, workspace_path, get_active_provider
+from bujji.identity import ensure_identity_files
 from bujji.session import SessionManager
 from bujji.agent import HeartbeatService, CronService
 
@@ -240,7 +241,19 @@ def cmd_desk(args):
         cleanup()
 
 
+def _ensure_workspace():
+    """Scaffold missing identity files (USER.md, SOUL.md, etc.) on first run."""
+    cfg = load_config()
+    ws = workspace_path(cfg)
+    ensure_identity_files(ws)
+    user_md = ws / "USER.md"
+    user_bak = ws / "USER.md.bak"
+    if user_md.exists() and not user_bak.exists():
+        user_bak.write_bytes(user_md.read_bytes())
+
+
 def main():
+    _ensure_workspace()
     parser = argparse.ArgumentParser(prog="tanu", description="🎙️ Voice assistant for DeskBot")
     sub = parser.add_subparsers(dest="command")
 

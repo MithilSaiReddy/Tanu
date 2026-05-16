@@ -7,7 +7,12 @@ __pycache__/
 
 #internal
 config/
-workspace/
+
+# User-specific workspace files (auto-generated, not shared)
+workspace/USER.md
+workspace/USER.md.bak
+workspace/HEARTBEAT.md
+workspace/tanu/
 bujji/bujji/config.json
 *models/*
 *tools/whisper.cpp/
