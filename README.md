@@ -1,82 +1,67 @@
-# Tanu 🎙️
+# Tanu
 
-**Voice assistant for DeskBot**
+**Floating desktop AI assistant** — a lightweight, always-on companion powered by
+the [bujji](https://github.com/anomalyco/bujji) agent framework and wrapped in a
+[Tauri v2](https://v2.tauri.app) desktop window.
 
-A calm, sharp, slightly witty personal assistant. Tanu listens with whisper.cpp, thinks with any LLM, and speaks with piper TTS.
+[![Docs](https://img.shields.io/badge/docs-mkdocs-blue)](https://mithilsaireddy.github.io/Tanu/)
 
 ---
 
-## What is Tanu?
+## Features
 
-Tanu is voice assistant software for DeskBot hardware. It runs locally with minimal cloud dependencies after setup.
-
-### Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     Tanu Voice Pipeline                     │
-├─────────────────────────────────────────────────────────────┤
-│   Microphone ──► webrtcvad ──► whisper.cpp ──► text        │
-│                        (VAD)           (STT)            │
-│                                                             │
-│   text ──► LLM (any OpenAI-compatible) ──► response        │
-│                          (brain)                          │
-│                                                             │
-│   response ──► piper (TTS) ──► speaker                    │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### Key Features
-
-- **Voice Activation** — webrtcvad detects speech
-- **Speech-to-Text** — whisper.cpp (local, low latency)
-- **AI Brain** — Any OpenAI-compatible LLM
-- **Text-to-Speech** — piper (local neural TTS)
-- **Tasks** — Create, list, complete, update, delete
-- **Reminders** — Set, list, cancel (voice/Telegram/Discord)
+- **Dual-mode window** — compact 60×60 floating orb ⇄ 400×600 chat panel
+- **Always-on-top** — stays visible over all apps, toggle with Ctrl+Shift+T
+- **Native drag** — OS-level window movement, auto-clamped to screen bounds
+- **Position memory** — remembers window position per mode across restarts
+- **Streaming responses** — real-time token-by-token LLM output via SSE
+- **Tool system** — web search, file ops, shell, Gmail, todos, and more
+- **Gmail integration** — OAuth2 flow, read inbox, search, send emails
+- **LLM agnostic** — works with OpenAI, OpenRouter, Ollama, Anthropic, Mistral
+- **Hotkey** — Ctrl+Shift+T toggles between float and chat mode
 
 ---
 
 ## Quick Start
 
-### Installation
+### Prerequisites
+
+- **Python** ≥ 3.10
+- **Rust** ≥ 1.77 — [rustup](https://rustup.rs)
+- **Tauri CLI** — `cargo install tauri-cli --version "^2"`
+- Platform dependencies — see [Installation](docs/content/getting-started/installation.md) for your OS
+
+### Setup
 
 ```bash
-# Clone and enter folder
-git clone https://github.com/MithilSaiReddy/Tanu.git
+git clone --recurse-submodules https://github.com/MithilSaiReddy/Tanu
 cd Tanu
 
-# Create virtual environment
-python -m venv venv
+python3 -m venv venv
 source venv/bin/activate
-
-# Install dependencies
 pip install -r requirements.txt
 
-# Install Tanu and bujji packages
-pip install -e .
-pip install -e bujji
+cd src/ui
+cargo tauri build
+cd ../..
 ```
 
-### First Setup
+### Run
 
 ```bash
-# Configure LLM provider
-python main.py onboard
+python3 main.py desk
 ```
 
-### Run Tanu
+The floating orb appears. Click it to open chat, press Ctrl+Shift+T to toggle.
+
+### Gmail
 
 ```bash
-# Voice mode
-python main.py tanu
-
-# Text mode (no microphone)
-python main.py tanu --text
-
-# Simulate mode (type input)
-python main.py tanu --simulate
+pip install google-auth google-auth-oauthlib google-api-python-client
 ```
+
+See the [Gmail setup guide](docs/content/guide/gmail-integration.md) for OAuth
+configuration.
 
 ---
 
@@ -84,99 +69,110 @@ python main.py tanu --simulate
 
 | Command | Description |
 |---------|-------------|
-| `python main.py onboard` | First-time setup |
-| `python main.py tanu` | Start voice assistant |
-| `python main.py tanu --text` | Text-only mode |
-| `python main.py tanu --simulate` | Type to simulate |
-| `python main.py serve` | Web UI |
-| `python main.py status` | Show status |
+| `python3 main.py desk` | Launch desktop app (server + Tauri) |
+| `python3 main.py serve` | Web UI only (http://localhost:7337) |
+| `python3 main.py tanu` | Voice assistant mode |
+| `python3 main.py agent` | Terminal chat |
+| `python3 main.py onboard` | First-time configuration wizard |
+| `python3 main.py status` | Show current config & status |
+
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────┐
+│             Tauri v2 Desktop App            │
+│  ┌───────────────────────────────────────┐  │
+│  │ Frontend (vanilla HTML/CSS/JS)       │  │
+│  │ invoke() ←→ Rust backend (lib.rs)    │  │
+│  └───────────────────────────────────────┘  │
+└─────────────────────┬───────────────────────┘
+                      │ fetch()
+                      ▼
+┌─────────────────────────────────────────────┐
+│          Python Server (localhost:7337)      │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  │
+│  │ /api/chat │  │/api/gmail│  │ API cfg  │  │
+│  │ (SSE)    │  │ (OAuth)  │  │ routes   │  │
+│  └──────────┘  └──────────┘  └──────────┘  │
+│  ┌───────────────────────────────────────┐  │
+│  │ AgentLoop + ToolRegistry              │  │
+│  │ LLM (OpenRouter/OpenAI/Ollama)        │  │
+│  └───────────────────────────────────────┘  │
+└─────────────────────────────────────────────┘
+```
+
+The Tauri shell is thin — all AI logic, tools, and OAuth live in the Python
+server. The WebView is just a client that calls `localhost:7337`.
 
 ---
 
 ## Project Structure
 
 ```
-tanu/
-├── config/                  # Local configuration
-│   └── config.json
-├── workspace/              # Workspace files
-│   └── tanu/             # Tanu identity files
-├── src/tanu/              # Main package
-│   ├── assets/           # whisper.cpp, piper
-│   │   ├── whisper.cpp/
-│   │   └── piper/
-│   ├── plugins/           # Voice & integrations
-│   │   ├── voice/        # deskbot
-│   │   └── integrations/ # telegram, discord
-│   └── tools/           # task, reminder
-├── bujji/               # bujji framework
-└── main.py              # CLI entry
+Tanu/
+├── main.py                     # CLI entry points
+├── src/
+│   ├── tanu/
+│   │   ├── config.py           # Config loader (injects tool_paths)
+│   │   ├── tools/              # Custom tools
+│   │   │   ├── gmail.py        # Gmail OAuth + inbox/send/search
+│   │   │   ├── speak_tool.py   # Text-to-speech
+│   │   │   ├── tanu_query.py   # Direct agent query
+│   │   │   └── ...
+│   │   └── plugins/voice/      # Voice assistant
+│   └── ui/                     # Tauri desktop app
+│       ├── src/                # Frontend (HTML/CSS/JS)
+│       └── src-tauri/          # Rust backend (lib.rs)
+├── bujji/                      # Agent framework (submodule)
+├── docs/                       # MkDocs documentation
+├── workspace/                  # Runtime data (gitignored)
+├── config/                     # Local config (gitignored)
+└── .github/workflows/          # CI/CD
 ```
 
 ---
 
-## Configuration
+## Documentation
 
-Config is stored locally at `config/config.json`:
+Full MkDocs documentation is available at:
+**https://mithilsaireddy.github.io/Tanu/**
 
-```json
-{
-  "active_provider": "mistral",
-  "agents": {
-    "defaults": {
-      "workspace": "workspace"
-    }
-  },
-  "providers": {
-    "mistral": {
-      "api_key": "your-key",
-      "api_base": "https://api.mistral.ai/v1"
-    }
-  },
-  "deskbot": {
-    "whisper_bin": "src/tanu/assets/whisper.cpp/build/bin/main",
-    "whisper_model": "src/tanu/assets/whisper.cpp/models/ggml-tiny.en.bin",
-    "piper_model": "src/tanu/assets/piper/en_US-lessac-medium.onnx"
-  }
-}
+Or build locally:
+
+```bash
+cd docs
+source ../venv/bin/activate
+pip install mkdocs mkdocs-material
+mkdocs serve
 ```
 
 ---
 
-## Customization
+## Gmail Integration
 
-### Identity Files
+Tanu supports full Gmail access via OAuth 2.0:
 
-Edit workspace files:
-- `workspace/tanu/SOUL.md` — Core personality
-- `workspace/tanu/IDENTITY.md` — User identity
-- `workspace/tanu/USER.md` — User preferences
+1. Enable Gmail API in [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a **Desktop app** OAuth client with `http://localhost` redirect URI
+3. Add the credential JSON to `~/.bujji/config.json` under `tools.gmail.client_creds`
+4. In the app: gear icon → Gmail → **Connect** → **Open Google Auth Page**
+5. Authorize → copy code from URL bar → **Verify**
 
-### Adding Tools
-
-Tanu tools are in `src/tanu/tools/`:
-- `tanu_task.py` — Task management
-- `tanu_reminder.py` — Reminders
-- `tanu_query.py` — Time, calculator
-
-### Plugins
-
-Add voice backends in `src/tanu/plugins/voice/`:
-- `deskbot.py` — Current voice plugin
+The LLM can then read inbox, search, send, and get emails. See the
+[full guide](docs/content/guide/gmail-integration.md) for details.
 
 ---
 
-## Dependencies
+## Contributing
 
-### Core
-- `requests` — HTTP client
-- `webrtcvad` — Voice activity detection
-- `sounddevice` — Audio input
-- `piper-tts` — Text-to-speech
+1. Fork the repo
+2. Create a feature branch
+3. Make changes (see [Building](docs/content/development/building.md))
+4. Submit a PR
 
-### Optional
-- `google-auth`, `google-auth-oauthlib`, `google-api-python-client` — Gmail
-- `discord.py` — Discord integration
+See [Contributing](docs/content/development/contributing.md) for details.
 
 ---
 
