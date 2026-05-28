@@ -16,6 +16,7 @@
     "core:window:allow-available-monitors",
     "core:window:allow-inner-position",
     "core:window:allow-outer-position",
+    "core:window:allow-set-always-on-top",
     "opener:default",
     "global-shortcut:default",
     "global-shortcut:allow-register",

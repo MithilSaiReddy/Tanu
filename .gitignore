@@ -4,7 +4,6 @@ __pycache__/
 *$py.class
 
 '
-
 #internal
 config/
 
@@ -235,3 +234,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Tauri / Rust build artifacts
+src/ui/src-tauri/target/
+src/ui/src-tauri/gen/
+
+# MkDocs build output
+site/

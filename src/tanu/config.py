@@ -47,4 +47,12 @@ def load_config() -> dict:
     # Ensure deskbot section exists with resolved paths
     cfg["deskbot"] = get_deskbot_config(cfg)
     
+    # Inject tool_paths for auto-discovery of Tanu-specific tools
+    # (tools live outside the bujji submodule, so bujji can't discover them on its own)
+    tools_dir = str(get_base_dir() / "src" / "tanu" / "tools")
+    cfg.setdefault("tool_paths", []).append({
+        "path": tools_dir,
+        "package": "tanu.tools",
+    })
+    
     return cfg

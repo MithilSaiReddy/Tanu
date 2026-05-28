@@ -24,12 +24,44 @@
                  onerror="this.style.display='none'">
             <span class="header-avatar">T</span>
           </span>
-          <span class="header-title">Tanu</span>
+          <span class="header-title" id="header-title">Tanu</span>
         </div>
-        <button id="btn-close" title="Minimize">_</button>
+        <div class="header-right">
+          <button id="btn-settings" title="Settings">&#9881;</button>
+          <button id="btn-close" title="Minimize">_</button>
+        </div>
       </div>
 
       <div id="messages"></div>
+
+      <div id="settings-panel" style="display:none">
+        <div class="settings-section">
+          <h3>Connections</h3>
+          <div id="gmail-card" class="conn-card">
+            <div class="conn-info">
+              <span class="conn-name">Gmail</span>
+              <span id="gmail-status" class="conn-status">Checking...</span>
+            </div>
+            <div id="gmail-actions">
+              <button id="btn-gmail-connect" class="conn-btn">Connect</button>
+            </div>
+            <div id="gmail-auth-flow" style="display:none">
+              <p class="auth-help">Authorize Tanu to access your Gmail:</p>
+              <button id="btn-gmail-open-url" class="conn-btn">Open Google Auth Page</button>
+              <p class="auth-help">After authorizing, paste the code below:</p>
+              <div class="auth-code-row">
+                <input id="gmail-code-input" type="text" placeholder="Paste full redirect URL or just the code..." />
+                <button id="btn-gmail-verify" class="conn-btn">Verify</button>
+              </div>
+              <p id="gmail-auth-msg" class="auth-msg"></p>
+            </div>
+            <div id="gmail-connected" style="display:none">
+              <span class="conn-badge connected">Connected</span>
+              <button id="btn-gmail-disconnect" class="conn-btn secondary">Disconnect</button>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div id="chat-input-area">
         <div id="status-bar">

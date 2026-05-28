@@ -147,6 +147,7 @@ def cmd_tanu_text(cfg, mgr):
 
 
 def cmd_serve(args):
+    from tanu.config import load_config
     from bujji.server import run_server
     cfg = load_config()
     port = getattr(args, "port", 7337) or 7337
@@ -169,13 +170,11 @@ def cmd_status(args):
 
 
 def _run_server(port: int):
-    """Run the bujji server in a subprocess (no browser)."""
-    import webbrowser as _wb
-    _wb.open = lambda url: None  # suppress bujji's webbrowser.open
-    from bujji.config import load_config
+    """Run the bujji server in a subprocess (quiet, API-only, no browser)."""
+    from tanu.config import load_config
     from bujji.server import run_server
     cfg = load_config()
-    run_server(cfg, port=port)
+    run_server(cfg, port=port, quiet=True)
 
 
 def cmd_desk(args):
@@ -218,17 +217,52 @@ def cmd_desk(args):
     server_proc = multiprocessing.Process(target=_run_server, args=(port,), daemon=True)
     server_proc.start()
 
-    tauri_proc = subprocess.Popen([str(tauri_bin)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    tauri_env = os.environ.copy()
+    tauri_env["GDK_BACKEND"] = "x11"
+    if "LD_LIBRARY_PATH" in tauri_env:
+        del tauri_env["LD_LIBRARY_PATH"]
+
+    UNIT_NAME = "tanu"
+
+    subprocess.run(
+        ["systemctl", "--user", "stop", f"{UNIT_NAME}.service"],
+        capture_output=True,
+    )
+    subprocess.run(
+        ["systemctl", "--user", "reset-failed", f"{UNIT_NAME}.service"],
+        capture_output=True,
+    )
+
+    tauri_proc = subprocess.Popen(
+        ["systemd-run", "--user", "--unit", UNIT_NAME, "--wait", "--", str(tauri_bin)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=tauri_env,
+    )
+
+    time.sleep(2.5)
+    if tauri_proc.poll() is not None:
+        stderr_output = tauri_proc.stderr.read()
+        print(f"\n❌ Tauri app crashed:")
+        if stderr_output:
+            print(stderr_output)
+        else:
+            print("   (no stderr output)")
+        server_proc.terminate()
+        return
 
     def cleanup(sig=None, frame=None):
         print("\nShutting down...")
-        tauri_proc.terminate()
+        subprocess.run(
+            ["systemctl", "--user", "stop", f"{UNIT_NAME}.service"],
+            capture_output=True,
+        )
         server_proc.terminate()
         try:
-            tauri_proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            tauri_proc.kill()
-        server_proc.join(timeout=5)
+            server_proc.join(timeout=5)
+        except Exception:
+            pass
         if server_proc.is_alive():
             server_proc.kill()
 
