@@ -124,3 +124,16 @@ cd src/ui && npm test
 ### Add a new tool
 
 See [Tool System](../guide/tool-system.md#writing-a-new-tool).
+
+### Build and preview documentation
+
+```bash
+cd docs
+source ../venv/bin/activate
+pip install mkdocs mkdocs-material
+mkdocs serve
+```
+
+Open `http://localhost:8000` to preview. The `docs/site/` output directory is
+gitignored. To deploy to GitHub Pages, push to `main` and use the GitHub
+Actions workflow (see [Contributing](../development/contributing.md#deploying-documentation)).

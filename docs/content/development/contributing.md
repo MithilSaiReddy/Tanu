@@ -65,6 +65,34 @@ When you make changes that affect both:
 - [ ] Window clamping tested on multi-monitor setups (if applicable)
 - [ ] `.gitignore` updated for any new generated files
 
+## Deploying Documentation
+
+The docs are built with MkDocs and deployed to GitHub Pages automatically via
+a GitHub Actions workflow (`.github/workflows/deploy-docs.yml`).
+
+### How it works
+
+- Triggered on every push to `main` that touches `docs/**`
+- Builds MkDocs from the `docs/` directory
+- Uploads `docs/site/` as a Pages artifact
+- Deploys to `https://mithilsaireddy.github.io/Tanu/`
+
+### One-time setup
+
+1. Go to repo **Settings → Pages → Source** → select **GitHub Actions**
+2. Push to `main` — the workflow runs automatically
+
+### Preview locally
+
+```bash
+cd docs
+source ../venv/bin/activate
+pip install mkdocs mkdocs-material
+mkdocs serve
+```
+
+Open `http://localhost:8000`.
+
 ## Reporting Issues
 
 Open an issue on GitHub with:

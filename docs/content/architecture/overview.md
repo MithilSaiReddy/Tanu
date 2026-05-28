@@ -58,3 +58,4 @@
 | `main.py` | Entry points: `desk`, `serve`, `tanu`, `agent` |
 | `config/` | Local configuration files (gitignored) |
 | `workspace/` | Runtime data: identity files, tokens, cron |
+| `docs/` | MkDocs technical documentation |
