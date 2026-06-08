@@ -390,6 +390,9 @@ class TanuReminderWorker:
         message = f"Reminder: {reminder['message']}"
         channel = reminder.get("channel", "both")
 
+        from tanu.notifier import notify_reminder as _notify_reminder
+        _notify_reminder(reminder['message'])
+
         print(f"[Tanu] Triggering reminder: {message}")
 
         if channel in ("voice", "both", "auto") and _tts_queue:

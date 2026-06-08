@@ -1,5 +1,21 @@
 # Quick Start
 
+## 0. Setup Environment
+
+Run the setup script to install system dependencies, Python venv, Rust, and Tauri CLI:
+
+```bash
+bash setup.sh
+```
+
+Or on Windows PowerShell:
+
+```powershell
+.\setup.ps1
+```
+
+See [Installation](installation.md) for manual setup.
+
 ## 1. Configure LLM Provider
 
 Run the onboarding wizard:
@@ -18,6 +34,16 @@ pip install google-auth google-auth-oauthlib google-api-python-client
 ```
 
 ## 3. Build the Desktop App
+
+### One-Command Build (Recommended)
+
+```bash
+bash build.sh
+```
+
+This produces a single installer in `binary/` containing both the Tauri frontend and Python server bundled as a sidecar.
+
+### Manual Build
 
 ```bash
 cd src/ui
@@ -38,6 +64,9 @@ python3 main.py desk
 > directly) — this ensures the Python server starts, the config uses
 > `tanu.config.load_config()` which injects `tool_paths` for tool discovery,
 > and the binary escapes the snap sandbox via `systemd-run`.
+>
+> In the bundled app (built via `bash build.sh`), the server is auto-started
+> by the Tauri sidecar — just launch the app directly.
 
 ### Web UI Only
 

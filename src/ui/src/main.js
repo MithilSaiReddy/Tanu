@@ -6,6 +6,21 @@ const SESSION_ID = "tanu-desktop";
 
 let streaming = false;
 let abortController = null;
+let historyOffset = 0;
+const HISTORY_PAGE = 50;
+let historyLoaded = false;
+
+const PROVIDERS = {
+  openrouter: { api_base: "https://openrouter.ai/api/v1",                    model: "openai/gpt-4o-mini" },
+  openai:     { api_base: "https://api.openai.com/v1",                       model: "gpt-4o-mini" },
+  anthropic:  { api_base: "https://api.anthropic.com/v1",                    model: "claude-3-haiku-20240307" },
+  groq:       { api_base: "https://api.groq.com/openai/v1",                  model: "llama3-8b-8192" },
+  google:     { api_base: "https://generativelanguage.googleapis.com/v1beta/openai", model: "gemini-2.0-flash" },
+  mistral:    { api_base: "https://api.mistral.ai/v1",                       model: "mistral-small-latest" },
+  zhipu:      { api_base: "https://open.bigmodel.cn/api/paas/v4",            model: "glm-4-flash" },
+  deepseek:   { api_base: "https://api.deepseek.com/v1",                     model: "deepseek-chat" },
+  ollama:     { api_base: "http://localhost:11434/v1",                       model: "llama3.2" },
+};
 
 const $ = (id) => document.getElementById(id);
 
@@ -16,8 +31,19 @@ const messagesEl   = $("messages");
 const msgInput     = $("msg-input");
 const btnSend      = $("btn-send");
 const btnClose     = $("btn-close");
+const btnHide      = $("btn-hide");
 const statusDot    = $("status-dot");
 const statusText   = $("status-text");
+const welcomeMsg   = $("welcome-msg");
+const scrollBtn    = $("scroll-bottom-btn");
+
+const wizard       = $("onboard-wizard");
+const wizProvider  = $("wiz-provider");
+const wizApiKey    = $("wiz-api-key");
+const wizModel     = $("wiz-model");
+const wizTest      = $("wiz-test");
+const wizTestRes   = $("wiz-test-result");
+const wizSave      = $("wiz-save");
 
 // ── Drag (native window manager via left button) ──
 
@@ -82,6 +108,7 @@ async function switchMode(mode) {
     document.body.className = "mode-chat";
     msgInput.focus();
     checkServer();
+    if (!historyLoaded) loadHistory(true);
   } else {
     document.body.className = "mode-float";
     cancelStream();
@@ -91,11 +118,7 @@ async function switchMode(mode) {
 async function openChat() {
   await invoke("set_chat");
   switchMode("chat");
-}
-
-async function closeChat() {
-  await invoke("set_floating");
-  switchMode("floating");
+  loadHistory(true);
 }
 
 // ── Listen for Rust mode-changed events (e.g. from hotkey) ──
@@ -106,7 +129,20 @@ listen("mode-changed", (event) => {
 
 // ── Event listeners ──
 
-btnClose.addEventListener("click", closeChat);
+btnClose.addEventListener("click", () => {
+  invoke("hide_app");
+});
+
+btnHide.addEventListener("click", () => {
+  invoke("hide_app");
+});
+
+// ── Input: textarea auto-resize ──
+
+msgInput.addEventListener("input", () => {
+  msgInput.style.height = "auto";
+  msgInput.style.height = Math.min(msgInput.scrollHeight, 120) + "px";
+});
 
 msgInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
@@ -116,6 +152,91 @@ msgInput.addEventListener("keydown", (e) => {
 });
 
 btnSend.addEventListener("click", sendMessage);
+
+// ── Welcome chips ──
+
+welcomeMsg.querySelectorAll(".chip").forEach((chip) => {
+  chip.addEventListener("click", () => {
+    const text = chip.dataset.msg;
+    if (text) {
+      msgInput.value = text;
+      sendMessage();
+    }
+  });
+});
+
+// ── Scroll-to-bottom button ──
+
+messagesEl.addEventListener("scroll", () => {
+  const nearBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 100;
+  scrollBtn.style.display = nearBottom ? "none" : "block";
+});
+
+scrollBtn.addEventListener("click", scrollToBottom);
+
+// ── History loading (scroll to top pagination) ──
+
+let loadingHistory = false;
+
+messagesEl.addEventListener("scroll", () => {
+  if (messagesEl.scrollTop < 30 && historyOffset > 0 && !loadingHistory) {
+    loadHistory(false);
+  }
+});
+
+async function loadHistory(reset) {
+  if (reset) {
+    historyOffset = 0;
+    historyLoaded = false;
+    messagesEl.querySelectorAll(".msg").forEach((el) => el.remove());
+  }
+  if (loadingHistory) return;
+  loadingHistory = true;
+
+  try {
+    const resp = await fetch(
+      `${SERVER_URL}/api/history?session_id=${SESSION_ID}&limit=${HISTORY_PAGE}&offset=${historyOffset}`,
+      { signal: AbortSignal.timeout(5000) }
+    );
+    if (!resp.ok) return;
+    const data = await resp.json();
+    if (!data.messages || data.messages.length === 0) {
+      if (reset) welcomeMsg.style.display = "flex";
+      return;
+    }
+
+    const prevScrollHeight = messagesEl.scrollHeight;
+    const prevScrollTop = messagesEl.scrollTop;
+
+    // Insert messages at the top (in reverse to maintain order)
+    const fragment = document.createDocumentFragment();
+    for (const msg of data.messages) {
+      const el = document.createElement("div");
+      el.className = `msg ${msg.role === "user" ? "user" : "bot"}`;
+      if (msg.role === "user") {
+        el.innerHTML = escapeHtml(msg.content);
+      } else {
+        el.innerHTML = renderMarkdown(msg.content);
+      }
+      fragment.appendChild(el);
+    }
+    messagesEl.insertBefore(fragment, messagesEl.firstChild);
+
+    // Preserve scroll position
+    if (reset) {
+      scrollToBottom();
+    } else {
+      messagesEl.scrollTop = messagesEl.scrollHeight - prevScrollHeight + prevScrollTop;
+    }
+
+    historyOffset += data.messages.length;
+    historyLoaded = true;
+    welcomeMsg.style.display = "none";
+  } catch {
+    // silently fail
+  }
+  loadingHistory = false;
+}
 
 // ── Server check ──
 
@@ -132,7 +253,7 @@ async function checkServer() {
     }
   } catch {
     statusDot.className = "dot-error";
-    statusText.textContent = "Server offline — run: python main.py serve";
+    statusText.textContent = "Server offline";
   }
 }
 
@@ -143,6 +264,8 @@ async function sendMessage() {
   if (!text || streaming) return;
 
   msgInput.value = "";
+  msgInput.style.height = "auto";
+  welcomeMsg.style.display = "none";
   addMessage(text, "user");
   cancelStream();
 
@@ -192,24 +315,22 @@ async function sendMessage() {
           const event = JSON.parse(jsonStr);
           if (event.type === "token") {
             fullContent += event.content;
-            botMsgEl.textContent = fullContent;
+            botMsgEl.innerHTML = renderMarkdown(fullContent) + timestampHTML();
             scrollToBottom();
           } else if (event.type === "done") {
             botMsgEl.classList.remove("streaming");
-            botMsgEl.textContent = event.content || fullContent;
+            botMsgEl.innerHTML = renderMarkdown(event.content || fullContent) + timestampHTML();
+            addCopyButton(botMsgEl);
             fullContent = event.content || fullContent;
           } else if (event.type === "error") {
-            botMsgEl.textContent = `Error: ${event.content}`;
+            botMsgEl.innerHTML = `Error: ${event.content}`;
             botMsgEl.classList.remove("streaming");
           } else if (event.type === "tool_start") {
-            addMessage(`🔧 ${event.name}...`, "system");
+            addMessage(`→ ${event.name}...`, "system tool-call");
           } else if (event.type === "tool_done") {
-            const sysMsgs = messagesEl.querySelectorAll(".msg.system");
+            const sysMsgs = messagesEl.querySelectorAll(".msg.system.tool-call");
             if (sysMsgs.length > 0) {
-              const last = sysMsgs[sysMsgs.length - 1];
-              if (last.textContent.startsWith("🔧")) {
-                last.remove();
-              }
+              sysMsgs[sysMsgs.length - 1].remove();
             }
           }
         } catch {
@@ -218,9 +339,10 @@ async function sendMessage() {
       }
     }
 
-    // If content was streamed via tokens, the done event already removed streaming class
     if (fullContent && botMsgEl.classList.contains("streaming")) {
       botMsgEl.classList.remove("streaming");
+      botMsgEl.innerHTML = renderMarkdown(fullContent) + timestampHTML();
+      addCopyButton(botMsgEl);
     }
   } catch (err) {
     if (err.name === "AbortError") return;
@@ -239,12 +361,83 @@ function cancelStream() {
   }
 }
 
+// ── Markdown Renderer ──
+
+function escapeHtml(text) {
+  const map = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" };
+  return text.replace(/[&<>"']/g, (c) => map[c]);
+}
+
+function renderMarkdown(text) {
+  if (!text) return "";
+
+  let html = escapeHtml(text);
+
+  // Code blocks (fenced) - must be done before inline code
+  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (match, lang, code) => {
+    const langAttr = lang ? ` class="lang-${lang}"` : "";
+    return `<pre><code${langAttr}>${code}</code></pre>`;
+  });
+
+  // Inline code
+  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+
+  // Bold
+  html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+
+  // Italic
+  html = html.replace(/\*(.+?)\*/g, "<em>$1</em>");
+
+  // Links
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+
+  // Unordered lists
+  html = html.replace(/^[\s]*[-*][\s]+(.+)$/gm, "<li>$1</li>");
+  html = html.replace(/(<li>.*<\/li>)/s, (match) => `<ul>${match}</ul>`);
+
+  // Line breaks
+  html = html.replace(/\n/g, "<br>");
+
+  return html;
+}
+
+function timestampHTML() {
+  const now = new Date();
+  const time = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return `<span class="msg-time">${time}</span>`;
+}
+
+function addCopyButton(msgEl) {
+  const btn = document.createElement("button");
+  btn.className = "copy-btn";
+  btn.textContent = "Copy";
+  btn.addEventListener("click", () => {
+    const text = msgEl.textContent.replace(msgEl.querySelector(".msg-time")?.textContent || "", "").trim();
+    navigator.clipboard.writeText(text).then(() => {
+      btn.textContent = "Copied!";
+      setTimeout(() => { btn.textContent = "Copy"; }, 2000);
+    });
+  });
+  msgEl.appendChild(btn);
+}
+
 // ── UI helpers ──
 
 function addMessage(text, cls) {
   const el = document.createElement("div");
   el.className = `msg ${cls}`;
-  if (text) el.textContent = text;
+  if (text && !cls.includes("streaming")) {
+    if (cls === "user") {
+      el.innerHTML = escapeHtml(text) + timestampHTML();
+    } else if (cls.startsWith("system")) {
+      el.textContent = text;
+    } else {
+      el.innerHTML = renderMarkdown(text) + timestampHTML();
+      addCopyButton(el);
+    }
+  } else if (cls.includes("streaming")) {
+    // Empty bot message, content added during stream
+  }
   messagesEl.appendChild(el);
   scrollToBottom();
   return el;
@@ -415,9 +608,161 @@ $("btn-gmail-disconnect").addEventListener("click", async () => {
   checkGmailStatus();
 });
 
+// ── First-run Onboard Wizard ──
+
+function populateProviders() {
+  for (const [key, val] of Object.entries(PROVIDERS)) {
+    const opt = document.createElement("option");
+    opt.value = key;
+    opt.textContent = key.charAt(0).toUpperCase() + key.slice(1);
+    wizProvider.appendChild(opt);
+  }
+  wizProvider.value = "openrouter";
+  wizModel.value = PROVIDERS.openrouter.model;
+}
+
+function onProviderChange() {
+  const p = wizProvider.value;
+  const info = PROVIDERS[p];
+  if (info && !wizModel.dataset.userChanged) {
+    wizModel.value = info.model;
+  }
+  validateWizard();
+}
+
+wizProvider.addEventListener("change", onProviderChange);
+
+wizModel.addEventListener("input", () => {
+  wizModel.dataset.userChanged = wizModel.value !== PROVIDERS[wizProvider.value]?.model ? "1" : "";
+  validateWizard();
+});
+
+wizApiKey.addEventListener("input", validateWizard);
+
+function validateWizard() {
+  const hasKey = wizApiKey.value.trim().length > 0;
+  wizTest.disabled = !hasKey;
+  wizSave.disabled = !hasKey;
+}
+
+async function testConnection() {
+  const provider = wizProvider.value;
+  const info = PROVIDERS[provider];
+  wizTest.disabled = true;
+  wizTestRes.className = "wiz-test-result";
+  wizTestRes.innerHTML = '<span class="wiz-spinner"></span>Testing...';
+
+  try {
+    const resp = await fetch(`${SERVER_URL}/api/config/test-llm`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        provider,
+        api_key: wizApiKey.value.trim(),
+        api_base: info.api_base,
+        model: wizModel.value.trim() || info.model,
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      wizTestRes.className = "wiz-test-result ok";
+      wizTestRes.textContent = `Connected (${data.model})`;
+    } else {
+      wizTestRes.className = "wiz-test-result err";
+      wizTestRes.textContent = data.error || "Connection failed";
+    }
+  } catch (err) {
+    wizTestRes.className = "wiz-test-result err";
+    wizTestRes.textContent = `Error: ${err.message}`;
+  }
+  wizTest.disabled = false;
+}
+
+wizTest.addEventListener("click", testConnection);
+
+async function saveConfig() {
+  const provider = wizProvider.value;
+  const info = PROVIDERS[provider];
+  const model = wizModel.value.trim() || info.model;
+
+  wizSave.disabled = true;
+  wizSave.textContent = "Saving...";
+
+  try {
+    const config = {
+      active_provider: provider,
+      providers: {
+        [provider]: {
+          api_key: wizApiKey.value.trim(),
+          api_base: info.api_base,
+        },
+      },
+      agents: {
+        defaults: { model },
+      },
+    };
+
+    const resp = await fetch(`${SERVER_URL}/api/config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(config),
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (!resp.ok) {
+      const data = await resp.json();
+      wizTestRes.className = "wiz-test-result err";
+      wizTestRes.textContent = data.error || "Save failed";
+      wizSave.disabled = false;
+      wizSave.textContent = "Save & Continue";
+      return;
+    }
+
+    // Success — enter chat mode
+    document.body.className = "mode-chat";
+    await invoke("set_chat");
+    switchMode("chat");
+    loadHistory(true);
+  } catch (err) {
+    wizTestRes.className = "wiz-test-result err";
+    wizTestRes.textContent = `Error: ${err.message}`;
+    wizSave.disabled = false;
+    wizSave.textContent = "Save & Continue";
+  }
+}
+
+wizSave.addEventListener("click", saveConfig);
+
+async function checkFirstRun() {
+  populateProviders();
+  // Retry fetching config (server may still be starting)
+  for (let attempt = 0; attempt < 6; attempt++) {
+    try {
+      const resp = await fetch(`${SERVER_URL}/api/config/raw`, {
+        signal: AbortSignal.timeout(2000),
+      });
+      if (!resp.ok) throw new Error("Not ready");
+      const cfg = await resp.json();
+      if (cfg.active_provider && cfg.providers?.[cfg.active_provider]?.api_key) {
+        return false;
+      }
+      break; // config responded but not configured → show wizard
+    } catch {
+      if (attempt < 5) {
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+    }
+  }
+  document.body.className = "mode-onboard";
+  return true;
+}
+
 // ── Init ──
 
 async function init() {
+  const isFirstRun = await checkFirstRun();
+  if (isFirstRun) return;
   try {
     const mode = await invoke("get_mode");
     switchMode(mode);

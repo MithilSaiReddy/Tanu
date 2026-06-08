@@ -499,26 +499,19 @@ class DeskbotConnection:
             self.display.show_speaking()
 
             try:
+                import sounddevice as sd
+                import numpy as np
+
                 audio_bytes = b""
                 for chunk in voice.synthesize(cleaned):
                     if hasattr(chunk, "audio_int16_bytes"):
                         audio_bytes += chunk.audio_int16_bytes
 
                 if audio_bytes:
-                    with wave.open("/tmp/deskbot_tts.wav", "wb") as f:
-                        f.setnchannels(1)
-                        f.setsampwidth(2)
-                        f.setframerate(22050)
-                        f.writeframes(audio_bytes)
+                    audio_array = np.frombuffer(audio_bytes, dtype=np.int16)
+                    sd.play(audio_array, samplerate=22050)
+                    sd.wait()
 
-                    subprocess.run(
-                        ["aplay", "-q", "/tmp/deskbot_tts.wav"],
-                        capture_output=True,
-                        timeout=10,
-                    )
-
-            except subprocess.TimeoutExpired:
-                LOG.error("[TTS] Timeout")
             except Exception as e:
                 LOG.error(f"[TTS] Error: {e}")
 

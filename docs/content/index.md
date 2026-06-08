@@ -7,7 +7,7 @@
 |                   |                                                    |
 |-------------------|----------------------------------------------------|
 | **Frontend**      | Tauri v2 (Rust + vanilla HTML/CSS/JS)              |
-| **Backend**       | Python — bujji server (localhost:7337)             |
+| **Backend**       | Python — bujji server (bundled as Tauri sidecar)   |
 | **LLM Provider**  | OpenAI / OpenRouter / Ollama / any OpenAI-compatible |
 | **Voice**         | Deskbot integration (optional)                     |
 | **Window modes**  | Floating orb (60×60) ↔ Chat panel (400×600)        |
@@ -25,7 +25,9 @@
 
 ## Quick Links
 
-- [Installation](getting-started/installation.md)
-- [Configuration](getting-started/configuration.md)
-- [Quick Start](getting-started/quickstart.md)
-- [Architecture Overview](architecture/overview.md)
+- [Installation](getting-started/installation.md) — system deps, setup script
+- [Configuration](getting-started/configuration.md) — LLM providers, API keys
+- [Quick Start](getting-started/quickstart.md) — configure, build, launch
+- [Building](development/building.md) — build.sh pipeline, binary output
+- [Setup](development/setup.md) — dev environment setup
+- [Architecture Overview](architecture/overview.md) — sidecar model, key paths

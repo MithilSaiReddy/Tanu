@@ -1,61 +1,68 @@
 # Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    Tauri v2 Desktop App                  │
-│  ┌──────────────────────────────────────────────────┐   │
-│  │  Frontend (vanilla HTML/CSS/JS)                  │   │
-│  │  ┌──────────┐  ┌──────────┐  ┌───────────────┐  │   │
-│  │  │ Float    │  │ Chat     │  │ Settings       │  │   │
-│  │  │ Circle   │  │ Panel    │  │ Panel (Gmail)  │  │   │
-│  │  └──────────┘  └──────────┘  └───────────────┘  │   │
-│  └──────────────────────────────────────────────────┘   │
-│  ┌──────────────────────────────────────────────────┐   │
-│  │  Rust Backend (lib.rs)                           │   │
-│  │  toggle_mode / set_chat / set_floating           │   │
-│  │  start_native_drag / get_mode / open_url_in_browser│  │
-│  │  clamp_to_screen()                               │   │
-│  └──────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────┘
-         │  JS invoke()        │  fetch()
-         ▼                     ▼
-┌─────────────────────────────────────────────────────────┐
-│               Python Server (localhost:7337)             │
-│  ┌──────────┐  ┌──────────┐  ┌──────────────────────┐  │
-│  │ /api/chat│  │/api/gmail│  │ /api/config           │  │
-│  │ (stream) │  │(OAuth)   │  │ /api/status           │  │
-│  └──────────┘  └──────────┘  └──────────────────────┘  │
-│  ┌──────────────────────────────────────────────────┐   │
-│  │  Agent Loop (bujji)                              │   │
-│  │  ToolRegistry → tools/{web,file,gmail,...}       │   │
-│  │  LLM Provider (OpenRouter/OpenAI/Ollama)         │   │
-│  └──────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│  Single Installable App (.deb/.dmg/.msi)                    │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │  Tauri v2 Desktop Window                              │  │
+│  │  ┌─────────────────────┐  ┌────────────────────────┐ │  │
+│  │  │ Frontend (vanilla)  │  │ Rust Backend (lib.rs)  │ │  │
+│  │  │ HTML/CSS/JS         │  │ ├─ toggle_mode         │ │  │
+│  │  │ Float ↔ Chat        │  │ ├─ start_native_drag   │ │  │
+│  │  │ Settings (Gmail)    │  │ ├─ clamp_to_screen()   │ │  │
+│  │  └──────────┬──────────┘  │ └─ spawn sidecar       │ │  │
+│  │             │ fetch()     │         │ spawn()      │ │  │
+│  │             ▼             │         ▼              │ │  │
+│  │  ┌──────────────────────────────────────────────┐  │  │
+│  │  │  Python Server (Sidecar — localhost:7337)    │  │  │
+│  │  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  │  │  │
+│  │  │  │ /api/chat │  │/api/gmail│  │ API cfg  │  │  │  │
+│  │  │  │ (SSE)    │  │ (OAuth)  │  │ routes   │  │  │  │
+│  │  │  └──────────┘  └──────────┘  └──────────┘  │  │  │
+│  │  │  ┌──────────────────────────────────────┐  │  │  │
+│  │  │  │ AgentLoop + ToolRegistry             │  │  │  │
+│  │  │  │ LLM (OpenRouter/OpenAI/Ollama/...)   │  │  │  │
+│  │  │  └──────────────────────────────────────┘  │  │  │
+│  │  └──────────────────────────────────────────────┘  │  │
+│  └───────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
 ```
+
+The Python server is bundled **inside** the Tauri app as a sidecar binary.
+When the app launches, Rust spawns the server, waits for it to be ready,
+then shows the window. When the user quits, the sidecar is killed.
 
 ## Design Principles
 
 1. **Lightweight** — The frontend is vanilla HTML/CSS/JS with no framework. The
-   Rust backend is minimal (window management only). Heavy lifting is in Python.
+   Rust backend is minimal (window management + sidecar lifecycle). Heavy lifting is in Python.
 
-2. **Always-on-top** — The window stays above all other applications. Two modes:
+2. **Bundled single app** — In production, the Python server is compiled to a
+   standalone binary (PyInstaller) and bundled into the Tauri installer. End users
+   install one app — no Python, no terminal.
+
+3. **Always-on-top** — The window stays above all other applications. Two modes:
    a 60×60 floating orb (minimal footprint) and a 400×600 chat panel.
 
-3. **Server-driven** — All AI logic, tool execution, and OAuth flows live in the
+4. **Server-driven** — All AI logic, tool execution, and OAuth flows live in the
    Python server. The Tauri shell is just a WebView that talks to `localhost:7337`.
 
-4. **Extensible tools** — Any Python module in `src/tanu/tools/` with a
+5. **Extensible tools** — Any Python module in `src/tanu/tools/` with a
    `@register_tool` decorator is auto-discovered and becomes available to the LLM.
 
 ## Key Paths
 
 | Path | Purpose |
 |------|---------|
-| `src/ui/` | Tauri v2 project (frontend + Rust) |
-| `bujji/` | Agent framework (git submodule) |
-| `src/tanu/tools/` | Custom tools (Gmail, speak, query, etc.) |
-| `src/tanu/config.py` | Config loader (injects `tool_paths`) |
 | `main.py` | Entry points: `desk`, `serve`, `tanu`, `agent` |
+| `scripts/build_server.py` | PyInstaller entry point for server sidecar |
+| `src/ui/` | Tauri v2 project (frontend + Rust) |
+| `src/ui/src-tauri/binaries/` | Sidecar binaries (auto-generated by build) |
+| `src/tanu/` | Python package: config, tools, voice plugins |
+| `bujji/` | Agent framework (git submodule) |
+| `build.sh / build.ps1` | Build scripts (produce bundled app) |
+| `setup.sh / setup.ps1` | Dev environment setup scripts |
+| `binary/` | Build output: installers and executables |
 | `config/` | Local configuration files (gitignored) |
 | `workspace/` | Runtime data: identity files, tokens, cron |
 | `docs/` | MkDocs technical documentation |

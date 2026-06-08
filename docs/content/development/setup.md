@@ -6,22 +6,36 @@ See [Installation](../getting-started/installation.md) for system requirements.
 
 ## Quick Dev Environment
 
+### One-Command Setup (Recommended)
+
 ```bash
-# 1. Clone with submodules
+git clone --recurse-submodules https://github.com/MithilSaiReddy/Tanu
+cd Tanu
+bash setup.sh
+```
+
+Or on Windows PowerShell:
+
+```powershell
+git clone --recurse-submodules https://github.com/MithilSaiReddy/Tanu
+cd Tanu
+.\setup.ps1
+```
+
+The setup script handles: system dependencies, Rust + Tauri CLI, Python venv + dependencies, submodules, and config.
+
+### Manual Setup
+
+```bash
 git clone --recurse-submodules https://github.com/MithilSaiReddy/Tanu
 cd Tanu
 
-# 2. Python virtual environment
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
-# 3. Gmail dependencies (optional)
+# Gmail dependencies (optional)
 pip install google-auth google-auth-oauthlib google-api-python-client
-
-# 4. Build Tauri debug binary
-cd src/ui
-cargo tauri build  # or `cargo tauri dev` for hot-reload
 ```
 
 ## Running in Development
@@ -29,24 +43,23 @@ cargo tauri build  # or `cargo tauri dev` for hot-reload
 ### Desktop App (with hot-reload frontend)
 
 ```bash
+# Terminal 1: start Python server
+python3 main.py serve
+
+# Terminal 2: start Tauri with hot-reload
 cd src/ui
 cargo tauri dev
 ```
 
-This starts the Tauri app with a dev server for the frontend. The Python server
-must be started separately:
-
-```bash
-python3 main.py serve
-```
-
-Then in the Tauri app, the frontend connects to `http://localhost:7337`.
+The Tauri app connects to `http://localhost:7337`.
 
 ### Desktop App (release binary)
 
 ```bash
 python3 main.py desk
 ```
+
+This starts both the Python server and the Tauri binary.
 
 ### Server-only
 
@@ -58,32 +71,25 @@ python3 main.py serve
 
 ```
 Tanu/
-├── main.py                 # Entry points
-├── config/
-│   └── config.json         # Local config (gitignored)
+├── main.py                 # Entry points (desk, serve, tanu, agent, onboard)
+├── scripts/
+│   └── build_server.py     # PyInstaller entry point for server sidecar
 ├── src/
-│   ├── tanu/
-│   │   ├── __init__.py
+│   ├── tanu/               # Tanu Python package
 │   │   ├── config.py       # Config loader (injects tool_paths)
-│   │   ├── tools/          # Custom tools
-│   │   │   ├── gmail.py
-│   │   │   ├── speak_tool.py
-│   │   │   ├── tanu_query.py
-│   │   │   └── ...
+│   │   ├── tools/          # Custom tools (gmail, tasks, reminders, etc.)
 │   │   └── plugins/
 │   │       └── voice/      # Voice assistant plugin
-│   └── ui/                 # Tauri desktop app
+│   └── ui/                 # Tauri v2 desktop app
 │       ├── src/            # Frontend (HTML/CSS/JS)
-│       ├── src-tauri/      # Rust backend
-│       └── ...
-├── bujji/                  # Agent framework (submodule)
-│   └── bujji/
-│       ├── server.py       # HTTP server
-│       ├── agent.py        # Agent loop
-│       ├── tools/          # Built-in tools
-│       └── ...
+│       └── src-tauri/      # Rust backend (lib.rs)
+├── bujji/                  # Agent framework (git submodule)
+├── docs/                   # MkDocs documentation
+├── build.sh / build.ps1   # Build scripts (produce binary/)
+├── setup.sh / setup.ps1   # Dev environment setup
+├── config/                 # Local config (gitignored)
 ├── workspace/              # Runtime data (gitignored)
-└── docs/                   # Documentation
+└── binary/                 # Build output (gitignored)
 ```
 
 ## Testing

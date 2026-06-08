@@ -148,7 +148,27 @@ cargo install tauri-cli --version "^2"
 
 ---
 
-## Clone & Prepare
+## Clone & Setup
+
+### One-Command Setup (Recommended)
+
+```bash
+git clone --recurse-submodules https://github.com/MithilSaiReddy/Tanu
+cd Tanu
+bash setup.sh
+```
+
+Or on Windows PowerShell:
+
+```powershell
+git clone --recurse-submodules https://github.com/MithilSaiReddy/Tanu
+cd Tanu
+.\setup.ps1
+```
+
+The `setup.sh` / `setup.ps1` script handles everything: system dependencies, Rust + Tauri CLI, Python venv, submodules, and config.
+
+### Manual Setup
 
 ```bash
 git clone --recurse-submodules https://github.com/MithilSaiReddy/Tanu

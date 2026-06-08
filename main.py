@@ -178,10 +178,11 @@ def _run_server(port: int):
 
 
 def cmd_desk(args):
-    TARGET_DIR = Path(__file__).parent / "src" / "ui"
+    ROOT = Path(__file__).parent
     TAURI_BINS = [
-        TARGET_DIR / "src-tauri" / "target" / "release" / "tanu",
-        TARGET_DIR / "src-tauri" / "target" / "debug" / "tanu",
+        ROOT / "build" / "tanu",
+        ROOT / "src" / "ui" / "src-tauri" / "target" / "release" / "tanu",
+        ROOT / "src" / "ui" / "src-tauri" / "target" / "debug" / "tanu",
     ]
 
     tauri_bin = None
@@ -198,43 +199,33 @@ def cmd_desk(args):
         print("       libgtk-3-dev libayatana-appindicator3-dev \\")
         print("       librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev")
         print()
-        print("  2. Install tauri-cli:")
-        print("     cargo install tauri-cli --version \"^2\"")
+        print("  2. Build:")
+        print("     ./build.sh")
         print()
-        print("  3. Build the desktop app:")
-        print(f"     cd {TARGET_DIR}")
-        print("     cargo tauri build")
-        print()
-        print("  4. Then run: python main.py desk")
+        print("  3. Then run: python main.py desk")
         return
 
-    print(f"🎙️ Starting server + desktop app...")
+    print("Starting server + desktop app...")
     print(f"   Server:  http://localhost:7337")
     print(f"   Hotkey:  Ctrl+Shift+T")
     print(f"   Binary:  {tauri_bin}")
+
+    try:
+        from tanu.notifier import notify
+        notify("Tanu", "Running in background. Press Ctrl+Shift+T to open.", timeout=4)
+    except Exception:
+        pass
 
     port = getattr(args, "port", 7337) or 7337
     server_proc = multiprocessing.Process(target=_run_server, args=(port,), daemon=True)
     server_proc.start()
 
     tauri_env = os.environ.copy()
-    tauri_env["GDK_BACKEND"] = "x11"
     if "LD_LIBRARY_PATH" in tauri_env:
         del tauri_env["LD_LIBRARY_PATH"]
 
-    UNIT_NAME = "tanu"
-
-    subprocess.run(
-        ["systemctl", "--user", "stop", f"{UNIT_NAME}.service"],
-        capture_output=True,
-    )
-    subprocess.run(
-        ["systemctl", "--user", "reset-failed", f"{UNIT_NAME}.service"],
-        capture_output=True,
-    )
-
     tauri_proc = subprocess.Popen(
-        ["systemd-run", "--user", "--unit", UNIT_NAME, "--wait", "--", str(tauri_bin)],
+        [str(tauri_bin)],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
         text=True,
@@ -244,7 +235,7 @@ def cmd_desk(args):
     time.sleep(2.5)
     if tauri_proc.poll() is not None:
         stderr_output = tauri_proc.stderr.read()
-        print(f"\n❌ Tauri app crashed:")
+        print("Tauri app crashed:")
         if stderr_output:
             print(stderr_output)
         else:
@@ -252,12 +243,21 @@ def cmd_desk(args):
         server_proc.terminate()
         return
 
+    cleanup_done = threading.Event()
+
     def cleanup(sig=None, frame=None):
+        if cleanup_done.is_set():
+            return
+        cleanup_done.set()
         print("\nShutting down...")
-        subprocess.run(
-            ["systemctl", "--user", "stop", f"{UNIT_NAME}.service"],
-            capture_output=True,
-        )
+        if tauri_proc.poll() is None:
+            tauri_proc.terminate()
+            try:
+                tauri_proc.wait(timeout=5)
+            except Exception:
+                pass
+            if tauri_proc.poll() is None:
+                tauri_proc.kill()
         server_proc.terminate()
         try:
             server_proc.join(timeout=5)
@@ -268,6 +268,8 @@ def cmd_desk(args):
 
     signal.signal(signal.SIGINT, cleanup)
     signal.signal(signal.SIGTERM, cleanup)
+    import atexit
+    atexit.register(cleanup)
 
     try:
         tauri_proc.wait()

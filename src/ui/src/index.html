@@ -8,6 +8,33 @@
     <script type="module" src="/main.js" defer></script>
   </head>
   <body class="mode-float">
+    <div id="onboard-wizard" style="display:none">
+      <div class="wizard-card">
+        <div class="wizard-header">
+          <span class="wizard-title">Welcome to Tanu</span>
+          <span class="wizard-subtitle">Set up your LLM provider to get started.</span>
+        </div>
+        <div class="wizard-form">
+          <label class="wiz-label">Provider</label>
+          <select id="wiz-provider" class="wiz-select"></select>
+
+          <label class="wiz-label">API Key</label>
+          <input id="wiz-api-key" type="password" class="wiz-input" placeholder="sk-..." autocomplete="off" />
+
+          <label class="wiz-label">Model</label>
+          <input id="wiz-model" type="text" class="wiz-input" placeholder="gpt-4o-mini" autocomplete="off" />
+          <span class="wiz-hint">Leave empty for the provider's default model.</span>
+        </div>
+        <div class="wizard-actions">
+          <button id="wiz-test" class="wiz-btn secondary" disabled>Test Connection</button>
+          <span id="wiz-test-result" class="wiz-test-result"></span>
+        </div>
+        <div class="wizard-footer">
+          <button id="wiz-save" class="wiz-btn primary" disabled>Save & Continue</button>
+        </div>
+      </div>
+    </div>
+
     <div id="float-circle">
       <img id="circle-logo" src="assets/1.svg" alt=""
            onload="this.dataset.loaded='1'"
@@ -27,12 +54,24 @@
           <span class="header-title" id="header-title">Tanu</span>
         </div>
         <div class="header-right">
-          <button id="btn-settings" title="Settings">&#9881;</button>
-          <button id="btn-close" title="Minimize">_</button>
+          <button id="btn-settings" class="btn-icon" title="Settings">Settings</button>
+          <button id="btn-hide" class="btn-icon" title="Hide to tray">Hide</button>
+          <button id="btn-close" class="btn-icon" title="Minimize">Close</button>
         </div>
       </div>
 
-      <div id="messages"></div>
+      <div id="messages">
+        <div id="welcome-msg">
+          <div class="welcome-title">Tanu</div>
+          <div class="welcome-subtitle">How can I help you today?</div>
+          <div class="welcome-chips">
+            <span class="chip" data-msg="What can you do?">What can you do?</span>
+            <span class="chip" data-msg="Help me write a Python script">Help me code</span>
+            <span class="chip" data-msg="Summarize my latest emails">Check my email</span>
+            <span class="chip" data-msg="Transcribe an audio file">Transcribe audio</span>
+          </div>
+        </div>
+      </div>
 
       <div id="settings-panel" style="display:none">
         <div class="settings-section">
@@ -69,10 +108,12 @@
           <span id="status-text">Connecting...</span>
         </div>
         <div id="input-row">
-          <input id="msg-input" type="text" placeholder="Message Tanu..." autocomplete="off" />
-          <button id="btn-send">&#10148;</button>
+          <textarea id="msg-input" rows="1" placeholder="Message Tanu..." autocomplete="off"></textarea>
+          <button id="btn-send">Send</button>
         </div>
       </div>
     </div>
+
+    <button id="scroll-bottom-btn">New messages below</button>
   </body>
 </html>

@@ -30,9 +30,17 @@ mode switch.
 called explicitly on every mode switch, not just at startup. This prevents
 window managers from dropping the always-on-top flag.
 
+**Server sidecar**: In `.setup()`, Rust spawns the Python server as a Tauri sidecar
+(`tauri-plugin-shell`). It polls `http://localhost:7337/api/status` every 500ms
+and shows the window once the server is ready. On quit, the sidecar process is killed.
+
+The sidecar binary (`binaries/tanu-{target-triple}`) is built with PyInstaller
+from `scripts/build_server.py` and bundled via `externalBin` in `tauri.conf.json`.
+
 Plugins:
 - `tauri-plugin-opener` — opens Gmail auth URLs in the system browser
 - `tauri-plugin-global-shortcut` — registers Ctrl+Shift+T hotkey
+- `tauri-plugin-shell` — spawns and manages the Python server sidecar
 
 ### Frontend Layer (`src/`)
 
@@ -84,7 +92,12 @@ The `desk` command (line 179 of `main.py`):
 3. Launches the Tauri binary via `systemd-run --user --unit tanu --wait`
 4. Cleans up both processes on Ctrl+C or exit
 
-**Config loading**: Both `desk` and `serve` now use `tanu.config.load_config()`
+In the bundled app (built via `build.sh`), the Python server is compiled into a
+standalone binary (PyInstaller) and bundled as a Tauri sidecar. The Rust backend
+spawns it automatically on startup — no separate `main.py desk` needed.
+The sidecar entry point is `scripts/build_server.py`.
+
+**Config loading**: Both `desk` and `serve` use `tanu.config.load_config()`
 (instead of `bujji.config.load_config()`) to ensure `tool_paths` is injected
 for custom tool discovery.
 

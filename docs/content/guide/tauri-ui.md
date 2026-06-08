@@ -78,6 +78,23 @@ fn clamp_to_screen(window: &WebviewWindow) {
 }
 ```
 
+## Server Sidecar
+
+On startup, `lib.rs` spawns the Python server as a Tauri sidecar:
+
+```rust
+let sidecar = app.shell().sidecar("tanu").unwrap();
+let (mut rx, child) = sidecar.spawn().unwrap();
+app.manage(ServerHandle(Mutex::new(Some(child))));
+```
+
+It polls `http://localhost:7337/api/status` every 500ms. Once the server
+responds, the window is shown. On tray "Quit", the sidecar process is killed.
+
+The sidecar binary is built with PyInstaller (`scripts/build_server.py`) and
+placed in `src/ui/src-tauri/binaries/tanu-{target-triple}` by the build script.
+Tauri bundles it automatically via `externalBin` in `tauri.conf.json`.
+
 ## Hotkey
 
 Ctrl+Shift+T is registered in `setup()` via `tauri-plugin-global-shortcut`.

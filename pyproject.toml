@@ -26,12 +26,17 @@ classifiers = [
 
 dependencies = [
     "requests",
-    "webrtcvad",
     "sounddevice",
     "piper-tts",
 ]
 
 [project.optional-dependencies]
+voice = [
+    "webrtcvad",
+]
+notify = [
+    "plyer",
+]
 gmail = [
     "google-auth",
     "google-auth-oauthlib",
@@ -48,8 +53,8 @@ dev = [
 [project.scripts]
 tanu = "tanu.cli:main"
 
-[tool.setuptools.packages]
-find = {"where": ["src"]}
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [project.urls]
 Homepage = "https://github.com/MithilSaiReddy/Tanu"
