@@ -4,11 +4,11 @@ Tanu - Voice assistant for DeskBot
 
 Usage:
     python main.py tanu              # Start voice assistant
-    python main.py tanu --text   # Text mode (no audio)
-    python main.py onboard        # First-time setup
-    python main.py serve         # Web UI
-    python main.py desk          # Floating desktop app (Tauri)
-    python main.py agent        # Chat in terminal
+    python main.py tanu --text       # Text mode (no audio)
+    python main.py onboard           # First-time setup
+    python main.py serve             # Web UI (HTTP + WebSocket)
+    python main.py desk              # Desktop app (Godot + server)
+    python main.py agent             # Chat in terminal
 
 Requirements:
     pip install -e .            # Install Tanu package
@@ -151,7 +151,7 @@ def cmd_serve(args):
     from bujji.server import run_server
     cfg = load_config()
     port = getattr(args, "port", 7337) or 7337
-    run_server(cfg, port=port)
+    run_server(cfg, port=port, quiet=True)
 
 
 def cmd_status(args):
@@ -179,40 +179,38 @@ def _run_server(port: int):
 
 def cmd_desk(args):
     ROOT = Path(__file__).parent
-    TAURI_BINS = [
-        ROOT / "build" / "tanu",
-        ROOT / "src" / "ui" / "src-tauri" / "target" / "release" / "tanu",
-        ROOT / "src" / "ui" / "src-tauri" / "target" / "debug" / "tanu",
+
+    GODOT_BINS = [
+        ROOT / "build" / "tanu-godot",
+        ROOT / "src" / "godot" / "build" / "tanu",
+        ROOT / "build" / "tanu-godot.x86_64",
     ]
 
-    tauri_bin = None
-    for b in TAURI_BINS:
+    ui_bin = None
+
+    for b in GODOT_BINS:
         if b.exists():
-            tauri_bin = b
+            ui_bin = b
             break
 
-    if not tauri_bin:
-        print("Tauri binary not found. Build it first:")
+    if not ui_bin:
+        print("No Godot binary found. Build one first:")
         print()
-        print("  1. Install system dependencies (requires sudo):")
-        print("     sudo apt install build-essential libwebkit2gtk-4.1-dev \\")
-        print("       libgtk-3-dev libayatana-appindicator3-dev \\")
-        print("       librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev")
+        print("  1. Install Godot 4: https://godotengine.org/download")
+        print("  2. Export: cd src/godot && godot --export-release linux")
+        print("  3. Copy binary to build/tanu-godot")
         print()
-        print("  2. Build:")
-        print("     ./build.sh")
-        print()
-        print("  3. Then run: python main.py desk")
+        print("  Then run: python main.py desk")
         return
 
     print("Starting server + desktop app...")
     print(f"   Server:  http://localhost:7337")
-    print(f"   Hotkey:  Ctrl+Shift+T")
-    print(f"   Binary:  {tauri_bin}")
+    print(f"   WS:      ws://localhost:7337/ws/chat")
+    print(f"   UI:      godot ({ui_bin})")
 
     try:
         from tanu.notifier import notify
-        notify("Tanu", "Running in background. Press Ctrl+Shift+T to open.", timeout=4)
+        notify("Tanu", "Running in background.", timeout=4)
     except Exception:
         pass
 
@@ -220,22 +218,22 @@ def cmd_desk(args):
     server_proc = multiprocessing.Process(target=_run_server, args=(port,), daemon=True)
     server_proc.start()
 
-    tauri_env = os.environ.copy()
-    if "LD_LIBRARY_PATH" in tauri_env:
-        del tauri_env["LD_LIBRARY_PATH"]
+    ui_env = os.environ.copy()
+    if "LD_LIBRARY_PATH" in ui_env:
+        del ui_env["LD_LIBRARY_PATH"]
 
-    tauri_proc = subprocess.Popen(
-        [str(tauri_bin)],
+    ui_proc = subprocess.Popen(
+        [str(ui_bin)],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
         text=True,
-        env=tauri_env,
+        env=ui_env,
     )
 
     time.sleep(2.5)
-    if tauri_proc.poll() is not None:
-        stderr_output = tauri_proc.stderr.read()
-        print("Tauri app crashed:")
+    if ui_proc.poll() is not None:
+        stderr_output = ui_proc.stderr.read()
+        print("Godot app crashed:")
         if stderr_output:
             print(stderr_output)
         else:
@@ -250,14 +248,14 @@ def cmd_desk(args):
             return
         cleanup_done.set()
         print("\nShutting down...")
-        if tauri_proc.poll() is None:
-            tauri_proc.terminate()
+        if ui_proc.poll() is None:
+            ui_proc.terminate()
             try:
-                tauri_proc.wait(timeout=5)
+                ui_proc.wait(timeout=5)
             except Exception:
                 pass
-            if tauri_proc.poll() is None:
-                tauri_proc.kill()
+            if ui_proc.poll() is None:
+                ui_proc.kill()
         server_proc.terminate()
         try:
             server_proc.join(timeout=5)
@@ -272,7 +270,7 @@ def cmd_desk(args):
     atexit.register(cleanup)
 
     try:
-        tauri_proc.wait()
+        ui_proc.wait()
     except KeyboardInterrupt:
         cleanup()
 
@@ -296,7 +294,7 @@ def main():
     sub.add_parser("onboard", help="First-time setup")
     sub.add_parser("serve", help="Web UI")
     sub.add_parser("status", help="Show status")
-    sub.add_parser("desk", help="Floating desktop app (Tauri)")
+    sub.add_parser("desk", help="Desktop app (Godot + server)")
 
     p_tanu = sub.add_parser("tanu", help="Start voice assistant")
     p_tanu.add_argument("--text", dest="text_mode", action="store_true", help="Text mode")

@@ -17,149 +17,86 @@ Write-Host "  └─────────────────────
 Write-Host ""
 
 # ────────────────────────────────────────────────────────────
-# 1. Detect target triple
+# 1. Find Godot binary
 # ────────────────────────────────────────────────────────────
-if (-not (Get-Command rustc -ErrorAction SilentlyContinue)) {
-    Err "Rust not found. Install it first: https://rustup.rs"
+$godot = $null
+foreach ($name in @("godot", "godot4")) {
+    $cmd = Get-Command $name -ErrorAction SilentlyContinue
+    if ($cmd) { $godot = $cmd.Source; break }
 }
 
-$targetTriple = &rustc -vV | Select-String "host" | ForEach-Object { $_ -replace 'host: ', '' }
-Log "Target: $targetTriple"
-
-$suffix = if ($targetTriple -match "windows") { ".exe" } else { "" }
-
-# ────────────────────────────────────────────────────────────
-# 2. Activate / create virtual environment
-# ────────────────────────────────────────────────────────────
-$python = "python"
-if (-not (Test-Path venv)) {
-    Info "Creating virtual environment..."
-    & $python -m venv venv
-}
-
-. .\venv\Scripts\Activate.ps1
-Log "Virtual environment activated"
-
-# ────────────────────────────────────────────────────────────
-# 3. Install build dependencies
-# ────────────────────────────────────────────────────────────
-Info "Installing build dependencies (pyinstaller)..."
-python -m pip install --quiet --upgrade pip
-python -m pip install --quiet pyinstaller -r requirements.txt
-Log "Build dependencies installed"
-
-# ────────────────────────────────────────────────────────────
-# 4. Build Python server binary with PyInstaller
-# ────────────────────────────────────────────────────────────
-$sidecarDir = "src/ui/src-tauri/binaries"
-$sidecarBin = "$sidecarDir/tanu-$targetTriple$suffix"
-
-Info "Building Python server binary (PyInstaller)..."
-New-Item -ItemType Directory -Force -Path $sidecarDir | Out-Null
-
-$hiddenImports = @(
-    "bujji.server",
-    "bujji.agent",
-    "bujji.session",
-    "bujji.config",
-    "bujji.identity",
-    "bujji.tools.base",
-    "bujji.tools.shell",
-    "bujji.tools.web",
-    "bujji.tools.file_ops",
-    "bujji.tools.memory",
-    "bujji.tools.subagents",
-    "bujji.tools.todo",
-    "bujji.tools.utils",
-    "tanu.config",
-    "tanu.tools.gmail",
-    "tanu.tools.speak_tool",
-    "tanu.tools.tanu_query",
-    "tanu.tools.tanu_task",
-    "tanu.tools.tanu_reminder"
-)
-
-$pyiArgs = @(
-    "--noconfirm", "--clean",
-    "--onefile",
-    "--name", "tanu",
-    "--distpath", $sidecarDir,
-    "--paths", "src",
-    "--paths", "bujji"
-)
-foreach ($hi in $hiddenImports) {
-    $pyiArgs += "--hidden-import"
-    $pyiArgs += $hi
-}
-$pyiArgs += "scripts/build_server.py"
-
-pyinstaller @pyiArgs
-
-# Rename to include target triple
-$pyiOutput = "$sidecarDir/tanu$suffix"
-if (Test-Path $pyiOutput -and $pyiOutput -ne $sidecarBin) {
-    Move-Item -Force $pyiOutput $sidecarBin
-}
-Log "Server binary: $sidecarBin"
-
-# ────────────────────────────────────────────────────────────
-# 5. Build Tauri desktop app
-# ────────────────────────────────────────────────────────────
-Info "Building Tauri desktop app..."
-Set-Location src/ui
-
-if (-not (Get-Command cargo-tauri -ErrorAction SilentlyContinue)) {
-    Info "Installing Tauri CLI..."
-    cargo install tauri-cli --version "^2"
-}
-
-cargo tauri build
-Set-Location $RepoRoot
-Log "Tauri desktop app built"
-
-# ────────────────────────────────────────────────────────────
-# 6. Collect artifacts to binary/
-# ────────────────────────────────────────────────────────────
-$bundleDir = "src/ui/src-tauri/target/release/bundle"
-$outDir = "binary"
-
-New-Item -ItemType Directory -Force -Path $outDir | Out-Null
-
-# Copy bundle artifacts
-if (Test-Path $bundleDir) {
-    foreach ($fmt in @("msi", "nsis", "wix")) {
-        $fmtDir = "$bundleDir/$fmt"
-        if (Test-Path $fmtDir) {
-            Copy-Item -Path "$fmtDir/*" -Destination $outDir -Force -ErrorAction SilentlyContinue
-        }
+if (-not $godot) {
+    # Check common install paths
+    $patterns = @(
+        "$env:USERPROFILE\Documents\Godot_v4*windows_x86_64.exe",
+        "$env:USERPROFILE\Documents\Godot_v4*win64.exe",
+        "$env:LOCALAPPDATA\Godot\godot.exe"
+    )
+    foreach ($pat in $patterns) {
+        $match = Get-Item $pat -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($match) { $godot = $match.FullName; break }
     }
-    Log "Artifacts copied to $outDir/"
 }
 
-# Also copy the raw executable
-$rawBin = "src/ui/src-tauri/target/release/tanu.exe"
-if (Test-Path $rawBin) {
-    Copy-Item -Path $rawBin -Destination $outDir/ -Force
-    Log "Binary copied to $outDir/tanu.exe"
+if (-not $godot) {
+    Err "Godot 4 not found. Install from: https://godotengine.org/download"
 }
-
-# Copy the sidecar server binary
-if (Test-Path $sidecarBin) {
-    Copy-Item -Path $sidecarBin -Destination $outDir/ -Force
-    Log "Server binary copied to $outDir/"
-}
+Log "Using Godot: $godot"
 
 # ────────────────────────────────────────────────────────────
-# 7. Summary
+# 2. Export the Godot project
+# ────────────────────────────────────────────────────────────
+$godotDir = "src/godot"
+$buildDir = "build"
+New-Item -ItemType Directory -Force -Path $buildDir | Out-Null
+
+Info "Exporting Godot project..."
+
+# Check if export preset exists
+if (-not (Test-Path "$godotDir/export_presets.cfg")) {
+    Info "Creating export_presets.cfg..."
+    @'
+[preset.0]
+
+name="Windows"
+platform="Windows"
+runnable=true
+dedicated_server=false
+custom_features=""
+export_filter="all_resources"
+include_filter=""
+exclude_filter=""
+
+export_path="tanu.exe"
+
+[preset.0.options]
+
+custom_template/debug=""
+custom_template/release=""
+debug/export_console_wrapper=1
+binary_format/embed_pck=true
+texture_format/s3tc_bptc=true
+texture_format/etc2_astc=false
+binary_format/architecture="x86_64"
+ssh_remote_deploy/enabled=false
+'@ | Set-Content -Path "$godotDir/export_presets.cfg"
+}
+
+& $godot --headless --path $godotDir --export-release "Windows" "$buildDir/tanu-godot.exe"
+if ($LASTEXITCODE -ne 0) {
+    Err "Export failed. Make sure you have export templates installed.`n  Godot Editor -> Manage Export Templates -> Download"
+}
+
+Log "Binary: $buildDir/tanu-godot.exe"
+
+# ────────────────────────────────────────────────────────────
+# 3. Summary
 # ────────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "  ┌────────────────────────────────────┐"
 Write-Host "  │      Build Complete!               │"
 Write-Host "  └────────────────────────────────────┘"
 Write-Host ""
-Write-Host "  ${CYAN}Output:${NC}"
-Get-ChildItem $outDir | ForEach-Object { Write-Host "    $($_.Name) ($( [math]::Round($_.Length/1MB, 2) ) MB)" }
-Write-Host ""
-Write-Host "  ${CYAN}Install:${NC}"
-Write-Host "    Install the package from binary\ on your target machine."
+Write-Host "  Output: $buildDir/tanu-godot.exe"
+Write-Host "  Run:    python main.py desk"
 Write-Host ""

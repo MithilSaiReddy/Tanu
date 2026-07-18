@@ -45,14 +45,22 @@ if (-not $python) {
 }
 Log "Python: $(& $python --version)"
 
-if (Get-Command rustc -ErrorAction SilentlyContinue) {
-    Log "Rust:   $(rustc --version)"
+if (Get-Command python -ErrorAction SilentlyContinue) {
+    Log "Python: $(python --version)"
 } else {
-    $script:RustInstalled = $false
+    Err "Python not found. Install from: https://python.org"
 }
 
-if (Get-Command cargo -ErrorAction SilentlyContinue) {
-    Log "Cargo:  $(cargo --version)"
+# Check for Godot 4
+$godot = $null
+foreach ($name in @("godot", "godot4")) {
+    $cmd = Get-Command $name -ErrorAction SilentlyContinue
+    if ($cmd) { $godot = $cmd.Source; break }
+}
+if ($godot) {
+    Log "Godot: $godot"
+} else {
+    Warn "Godot 4 not found. Download: https://godotengine.org/download"
 }
 
 # ────────────────────────────────────────────────────────────
@@ -60,53 +68,14 @@ if (Get-Command cargo -ErrorAction SilentlyContinue) {
 # ────────────────────────────────────────────────────────────
 if (-not $NoSystemDeps) {
     Info "Checking system dependencies..."
-    
-    $hasVS = $false
-    $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-    if (Test-Path $vswhere) {
-        $vsPath = &$vswhere -latest -property installationPath 2>$null
-        if ($vsPath) { $hasVS = $true }
-    }
-
-    if (-not $hasVS) {
-        Warn "Visual Studio Build Tools not detected."
-        Warn "  Install via winget (recommended):"
-        Warn "    winget install Microsoft.VisualStudio.2022.BuildTools"
-        Warn "  Or manually: https://visualstudio.microsoft.com/visual-cpp-build-tools/"
-        Warn "  (Select 'Desktop development with C++' workload)"
-        Warn ""
-        $choice = Read-Host "Attempt winget install? (y/N)"
-        if ($choice -eq 'y') {
-            winget install Microsoft.VisualStudio.2022.BuildTools --override "--add Microsoft.VisualStudio.Workload.VCTools;includeRecommended"
-        }
-    } else {
-        Log "Visual Studio Build Tools detected"
-    }
+    # Voice assistant requires portaudio
+    Info "For voice mode, ensure portaudio is installed."
 } else {
     Warn "Skipping system deps check (-NoSystemDeps)"
 }
 
 # ────────────────────────────────────────────────────────────
-# 3. Install Rust + Tauri CLI
-# ────────────────────────────────────────────────────────────
-if ($script:RustInstalled -eq $false) {
-    Info "Installing Rust via rustup..."
-    Invoke-WebRequest -Uri https://sh.rustup.rs -OutFile "$env:TEMP\rustup-init.exe"
-    & "$env:TEMP\rustup-init.exe" -y
-    $env:Path = [Environment]::GetEnvironmentVariable("Path", "User") + ";$env:USERPROFILE\.cargo\bin"
-    Log "Rust installed: $(rustc --version)"
-}
-
-if (-not (Get-Command cargo-tauri -ErrorAction SilentlyContinue)) {
-    Info "Installing Tauri CLI (cargo install tauri-cli)..."
-    cargo install tauri-cli --version "^2"
-    Log "Tauri CLI installed: $(cargo tauri --version)"
-} else {
-    Log "Tauri CLI: $(cargo tauri --version)"
-}
-
-# ────────────────────────────────────────────────────────────
-# 4. Initialize git submodules
+# 3. Initialize git submodules
 # ────────────────────────────────────────────────────────────
 if (Test-Path .gitmodules) {
     Info "Initializing git submodules..."

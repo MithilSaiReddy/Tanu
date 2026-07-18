@@ -17,18 +17,11 @@
 - Use type hints where practical
 - Avoid unnecessary comments — code should be self-documenting
 
-### Rust
+### GDScript (Godot)
 
-- Follow standard Rust conventions (`cargo fmt`, `cargo clippy`)
-- Use `tauri::command` for all IPC functions
-- Annotate with proper error types (`Result<(), String>`)
-
-### JavaScript / Frontend
-
-- Vanilla JS only — no frameworks
-- Use `const` / `let` (no `var`)
-- DOM access via `document.getElementById()` (`$` helper in `main.js`)
-- `fetch()` for server calls, `invoke()` for Tauri native calls
+- Follow the [GDScript style guide](https://docs.godotengine.org/en/stable/tutorials/scripting/gdscript/gdscript_styleguide.html)
+- Use snake_case for variables/functions, PascalCase for classes
+- Signals should use past tense (e.g., `connected`, `message_received`)
 
 ## Git Workflow
 
@@ -58,11 +51,10 @@ When you make changes that affect both:
 
 ## Pull Request Checklist
 
-- [ ] Builds successfully (`cargo tauri build`)
 - [ ] Server starts without errors (`python3 main.py serve`)
+- [ ] Godot client connects and streams responses
 - [ ] No new warnings or errors
 - [ ] Gmail flow tested (if applicable)
-- [ ] Window clamping tested on multi-monitor setups (if applicable)
 - [ ] `.gitignore` updated for any new generated files
 
 ## Deploying Documentation
@@ -99,4 +91,4 @@ Open an issue on GitHub with:
 - Description of the bug or feature request
 - Steps to reproduce (for bugs)
 - Relevant logs or screenshots
-- Environment info (OS, display server, Tauri version)
+- Environment info (OS, Godot version, Python version)

@@ -4,52 +4,13 @@
 
 | Dependency | Min. Version | Purpose |
 |-----------|--------------|---------|
-| Python    | ≥ 3.10       | Backend server & agent framework |
-| Rust      | ≥ 1.77       | Compile Tauri v2 native binary |
-| systemd   | ≥ 250        | `systemd-run --user` (Linux only — escapes snap sandbox) |
+| Python    | >= 3.10      | Backend server & agent framework |
+| Godot 4   | >= 4.0       | Desktop character UI |
 
 ---
 
 ## Linux
 
-### System Dependencies
-
-Choose your distribution:
-
-=== "Debian / Ubuntu"
-
-    ```bash
-    sudo apt update
-    sudo apt install build-essential libwebkit2gtk-4.1-dev \
-      libgtk-3-dev libayatana-appindicator3-dev \
-      librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev
-    ```
-
-=== "Fedora"
-
-    ```bash
-    sudo dnf groupinstall "C Development Tools and Libraries"
-    sudo dnf install webkit2gtk4.1-devel gtk3-devel \
-      libappindicator-gtk3-devel librsvg2-devel \
-      libsoup3-devel javascriptcoregtk4.1-devel
-    ```
-
-=== "Arch Linux"
-
-    ```bash
-    sudo pacman -S base-devel webkit2gtk-4.1 gtk3 \
-      libappindicator-gtk3 librsvg libsoup3
-    ```
-
-=== "openSUSE"
-
-    ```bash
-    sudo zypper install -t pattern devel_basis
-    sudo zypper install webkit2gtk4_1-devel gtk3-devel \
-      libappindicator-gtk3-devel librsvg-devel \
-      libsoup3-devel javascriptcoregtk4_1-devel
-    ```
-
 ### Python
 
 ```bash
@@ -58,26 +19,24 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### Rust / Tauri CLI
+### Godot 4
+
+Download from [godotengine.org](https://godotengine.org/download):
 
 ```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source "$HOME/.cargo/env"
-cargo install tauri-cli --version "^2"
+# After downloading, make it executable
+chmod +x ~/Downloads/Godot_v4*-linux.x86_64
+
+# Optional: move to a PATH-accessible location
+sudo cp ~/Downloads/Godot_v4*-linux.x86_64 /usr/local/bin/godot
 ```
+
+Or install via package manager (if available for your distro).
 
 ---
 
 ## macOS
 
-### System Dependencies
-
-Install [Xcode Command Line Tools](https://developer.apple.com/xcode/resources/):
-
-```bash
-xcode-select --install
-```
-
 ### Python
 
 ```bash
@@ -86,42 +45,13 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### Rust / Tauri CLI
+### Godot 4
 
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source "$HOME/.cargo/env"
-cargo install tauri-cli --version "^2"
-```
-
-### Homebrew (Alternative)
-
-```bash
-brew install python rust
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-cargo install tauri-cli --version "^2"
-```
-
-> **Note**: macOS uses `webkit2gtk` via the system WebKit framework — no extra
-> libraries needed. However, some Python packages with native extensions may
-> require Xcode tools.
+Download from [godotengine.org](https://godotengine.org/download) — choose the macOS version.
 
 ---
 
 ## Windows
-
-### System Dependencies
-
-1. Install **Microsoft Visual Studio Build Tools** (or Visual Studio 2022 with
-   the "Desktop development with C++" workload):
-   - Download from [visualstudio.microsoft.com](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022)
-   - During install, select: **Desktop development with C++**
-   - Include the **Windows 10/11 SDK**
-
-2. **WebView2** — included by default on Windows 10 (build 1803+) and Windows 11.
-   On older builds, install from [Microsoft](https://developer.microsoft.com/en-us/microsoft-edge/webview2/).
 
 ### Python
 
@@ -131,20 +61,9 @@ python -m venv venv
 pip install -r requirements.txt
 ```
 
-### Rust / Tauri CLI
+### Godot 4
 
-```powershell
-# Install Rust via rustup
-winget install Rustlang.Rustup
-# Or manually: https://rustup.rs
-
-# Then:
-cargo install tauri-cli --version "^2"
-```
-
-> **Troubleshooting**: If you see `link.exe` not found, ensure Visual Studio
-> Build Tools are installed and restart your terminal. Use the "Developer
-> Command Prompt for VS 2022" if needed.
+Download from [godotengine.org](https://godotengine.org/download) — choose the Windows version.
 
 ---
 
@@ -166,7 +85,7 @@ cd Tanu
 .\setup.ps1
 ```
 
-The `setup.sh` / `setup.ps1` script handles everything: system dependencies, Rust + Tauri CLI, Python venv, submodules, and config.
+The `setup.sh` / `setup.ps1` script handles everything: system dependencies, Python venv, submodules, and config.
 
 ### Manual Setup
 

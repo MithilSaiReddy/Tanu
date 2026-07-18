@@ -1,13 +1,12 @@
 # Gmail Integration
 
 Tanu can read, search, and send Gmail emails via OAuth 2.0. The integration
-spans three layers:
+spans two layers:
 
 | Layer | File | Role |
 |-------|------|------|
 | Server OAuth endpoints | `bujji/bujji/server.py` | Generate auth URL, exchange code → token |
 | Tool implementations | `src/tanu/tools/gmail.py` | Functions the LLM calls (inbox, send, search, get) |
-| Settings UI | `src/ui/src/index.html` + `main.js` | OAuth flow UI in the Tauri settings panel |
 
 ---
 
@@ -91,15 +90,14 @@ Gmail tool functions read from this same config key.
 
 Where to edit this:
 
-- **Tauri UI**: Click the gear icon (⚙) → Settings panel → (config editing can be
-  added via the `POST /api/config` endpoint)
 - **Direct file**: Edit `~/.bujji/config.json` (copy from `config/config.json`)
+- **Server API**: Use `POST /api/config` endpoint
 
 ---
 
 ## OAuth Flow (Step by Step)
 
-All steps are performed in the Tauri desktop app's settings panel:
+The Gmail OAuth flow is performed via the server API endpoints:
 
 ```
   ⚙ Settings
@@ -136,15 +134,12 @@ The server:
 
 ### 2. Open Auth Page
 
-Click **Open Google Auth Page**. The frontend calls:
+Click **Open Google Auth Page**. The server returns the auth URL. Open it in
+your system browser:
 
-```javascript
-invoke("open_url_in_browser", { url: authUrl });
+```bash
+# The auth URL will be printed in the terminal, or you can open it manually
 ```
-
-This uses `tauri-plugin-opener` to open the URL in your **system browser**
-(not inside the Tauri WebView, because `window.open()` doesn't work for
-external URLs in a Tauri webview).
 
 ### 3. Authorize
 
@@ -245,7 +240,7 @@ Tanu: Let me check...
 | `400 invalid_request` on auth URL | `redirect_uri` was `None` (library bug) | Server now sets `flow.redirect_uri` explicitly — **restart `desk`** |
 | `invalid_grant` on Verify | PKCE `code_verifier` mismatch | Server now caches the flow — **restart `desk`** |
 | "Gmail tools not found" / "I don't have access" | `tool_paths` not injected — tools not discovered | Run via `python3 main.py desk` which uses `tanu.config.load_config()` |
-| "Server offline" in status bar | Python server not running | Ensure `python3 main.py desk` is running |
+| Server not running | Python server not running | Ensure `python3 main.py desk` is running |
 | Token expired and not refreshing | Corrupted token file | Click **Disconnect** → reconnect |
 | Browser shows connection refused | Nothing listening on port 80 | **Normal** — copy the code from the URL bar anyway |
 

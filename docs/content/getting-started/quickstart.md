@@ -2,7 +2,7 @@
 
 ## 0. Setup Environment
 
-Run the setup script to install system dependencies, Python venv, Rust, and Tauri CLI:
+Run the setup script to install system dependencies, Python venv, and check for Godot:
 
 ```bash
 bash setup.sh
@@ -41,32 +41,28 @@ pip install google-auth google-auth-oauthlib google-api-python-client
 bash build.sh
 ```
 
-This produces a single installer in `binary/` containing both the Tauri frontend and Python server bundled as a sidecar.
+This exports the Godot project as a standalone binary in `build/tanu-godot`.
 
 ### Manual Build
 
+Open the project in Godot editor and export:
+
 ```bash
-cd src/ui
-cargo tauri build
+godot --path src/godot
 ```
 
-The binary is at `src/ui/src-tauri/target/release/tanu`.
+Then use **Project → Export** to create a standalone binary.
 
 ## 4. Launch
 
-### Desktop Mode (Floating Orb + Chat)
+### Desktop Mode (Godot Character + Chat)
 
 ```bash
 python3 main.py desk
 ```
 
-> **Important**: Always use `python3 main.py desk` (not running the Tauri binary
-> directly) — this ensures the Python server starts, the config uses
-> `tanu.config.load_config()` which injects `tool_paths` for tool discovery,
-> and the binary escapes the snap sandbox via `systemd-run`.
->
-> In the bundled app (built via `bash build.sh`), the server is auto-started
-> by the Tauri sidecar — just launch the app directly.
+This starts the Python server and launches the Godot client. The client connects
+to the server via WebSocket automatically.
 
 ### Web UI Only
 
@@ -88,12 +84,9 @@ Once the desktop app is running:
 
 | Action | Result |
 |--------|--------|
-| Click the floating orb | Opens the chat panel |
-| Drag the orb | Moves the window |
-| Drag the chat header | Moves the chat window |
-| Ctrl+Shift+T | Toggle between float and chat mode |
-| Gear icon (⚙) in chat header | Open settings |
-| Type a message + Enter | Send to the LLM |
+| Type a message + Enter/Send | Send to the LLM |
+| Watch the character | Animates through idle → thinking → speaking states |
+| Status bar | Shows connection status and current state |
 
 ### Gmail Setup
 
@@ -103,11 +96,7 @@ See [Gmail Integration](../guide/gmail-integration.md) for setting up email acce
 
 | Symptom | Likely Cause | Fix |
 |---------|-------------|------|
-| "Server offline" in status bar | Server not running | Ensure `python3 main.py desk` is running |
-| Snap-related crash at launch | Running inside ptyxis snap | Fixed automatically by `systemd-run --user --unit tanu --wait` |
-| Tauri binary won't build | Missing system deps | `sudo apt install build-essential libwebkit2gtk-4.1-dev ...` |
-| "text file busy" during rebuild | Old Tauri binary still running | `systemctl --user stop tanu && systemctl --user reset-failed tanu` |
-| Gmail "400 invalid_request" | `redirect_uri` was `None` | Restart `desk` (server now sets it explicitly) |
-| Gmail "invalid_grant" on Verify | PKCE verifier mismatch | Restart `desk` (server now caches the flow) |
+| "Connecting..." stuck | Server not running | Ensure `python3 main.py desk` is running |
+| Godot window not appearing | Binary not built | Run `bash build.sh` or export from Godot editor |
+| No response to messages | WebSocket not connected | Check server is running on port 7337 |
 | Gmail tools not found by LLM | `tool_paths` not injected | Use `python3 main.py desk` (not `main.py serve` alone) |
-| Gmail "I don't have access" | Tools undiscovered or no token | Check `~/bujji/config.json` has `client_creds`, restart `desk` |

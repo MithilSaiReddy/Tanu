@@ -2,7 +2,7 @@
 
 ## Release Build (Recommended)
 
-Use the build script to produce a single installer with the Python server bundled as a sidecar:
+Use the build script to export the Godot project as a standalone binary:
 
 ```bash
 bash build.sh
@@ -15,72 +15,62 @@ Or on Windows PowerShell:
 ```
 
 The script:
-1. Builds the Python server into a standalone binary (PyInstaller)
-2. Copies it to `src/ui/src-tauri/binaries/` (Tauri sidecar convention)
-3. Runs `cargo tauri build` (bundles the sidecar into the installer)
-4. Copies all artifacts to `binary/` at the project root
+1. Finds the Godot 4 binary in PATH or common install locations
+2. Creates `export_presets.cfg` if missing
+3. Runs `godot --headless --export-release` to produce a standalone binary
+4. Places the output in `build/tanu-godot`
 
-Platform-specific output in `binary/`:
+Platform-specific output in `build/`:
 
 | Platform | Files |
 |----------|-------|
-| **Linux** | `Tanu_0.1.0_amd64.deb`, `Tanu-0.1.0-1.x86_64.rpm`, `Tanu_0.1.0_amd64.AppImage`, `tanu` (raw binary) |
-| **macOS** | `Tanu_0.1.0_x64.dmg` (or `aarch64` on Apple Silicon) |
-| **Windows** | `Tanu_0.1.0_x64.msi` or `Tanu_0.1.0_x64-setup.exe` |
+| **Linux** | `tanu-godot` (x86_64 binary) |
+| **macOS** | `tanu-godot.app` or `tanu-godot.dmg` |
+| **Windows** | `tanu-godot.exe` |
 
-## Manual Tauri Build (No Sidecar)
+## Manual Godot Export
 
-Build just the Tauri desktop app (without bundling the Python server):
-
-```bash
-cd src/ui
-cargo tauri build
-```
-
-The binary is at `src/ui/src-tauri/target/release/tanu`.  
-Run it with `python3 main.py desk` (the Python server must be started separately).
-
-## Debug Build
+Open the project in the Godot editor:
 
 ```bash
-cd src/ui
-cargo tauri build --debug
+godot --path src/godot
 ```
 
-Or for development with hot-reload:
+Then use **Project → Export**:
+1. Add a preset for your target platform (Linux, Windows, macOS)
+2. Set the export path
+3. Click **Export Project**
 
-```bash
-cd src/ui
-cargo tauri dev
-```
+## Export Templates
 
-This starts a dev server for the frontend (changes to HTML/CSS/JS are reflected
-immediately) and launches the Tauri window.
+Godot requires export templates to build standalone binaries. Install them via:
+
+**Godot Editor → Manage Export Templates → Download**
+
+Or manually download from [godotengine.org](https://godotengine.org/download) and place in:
+- Linux: `~/.local/share/godot/export_templates/`
+- macOS: `~/Library/Application Support/Godot/export_templates/`
+- Windows: `%APPDATA%\Godot\export_templates\`
 
 ## Build Artifacts
 
-The `src/ui/src-tauri/target/` directory contains all Rust build artifacts.
-It can exceed 2 GB after a release build. It's excluded from git via `.gitignore`.
+The `build/` directory contains exported binaries. It's excluded from git via `.gitignore`.
 
 ## Troubleshooting
 
-### "text file busy" during build
+### "Export template not found"
 
-The previous Tauri binary is still running:
+Install Godot export templates via the editor (**Manage Export Templates → Download**).
 
-```bash
-systemctl --user stop tanu
-systemctl --user reset-failed tanu
-```
+### "Godot not found in PATH"
 
-Then retry the build.
-
-### Missing libraries
-
-Ensure system dependencies are installed (see [Installation](../getting-started/installation.md)).
-
-### Tauri CLI not found
+Either add Godot to your PATH or specify the path:
 
 ```bash
-cargo install tauri-cli --version "^2"
+GODOT=/path/to/godot bash build.sh
 ```
+
+### Export fails with errors
+
+Open the project in the Godot editor (`godot --path src/godot`) and check for
+scene/script errors before exporting.

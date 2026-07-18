@@ -43,6 +43,10 @@ def load_config() -> dict:
     # Ensure tanu section exists
     if "tanu" not in cfg:
         cfg["tanu"] = {"voice_enabled": True, "stream_tts": True}
+
+    # Ensure wakeword section exists
+    if "wakeword" not in cfg:
+        cfg["wakeword"] = {"enabled": False, "engine": "openwakeword", "model_path": "", "threshold": 0.5}
     
     # Ensure deskbot section exists with resolved paths
     cfg["deskbot"] = get_deskbot_config(cfg)

@@ -1,6 +1,6 @@
 # Tanu
 
-**Desktop AI assistant** — a lightweight, always-on companion powered by the [bujji](https://github.com/anomalyco/bujji) agent framework and wrapped in a [Tauri v2](https://v2.tauri.app) desktop window.
+**Desktop AI assistant** — a lightweight, always-on companion powered by the [bujji](https://github.com/anomalyco/bujji) agent framework with a [Godot 4](https://godotengine.org) animated character UI.
 
 [![Docs](https://img.shields.io/badge/docs-mkdocs-blue)](https://mithilsaireddy.github.io/Tanu/)
 
@@ -12,11 +12,11 @@
 git clone --recurse-submodules https://github.com/MithilSaiReddy/Tanu
 cd Tanu
 bash setup.sh           # installs everything
-bash build.sh           # builds the desktop app binary
+bash build.sh           # exports the Godot desktop app
 python3 main.py onboard # configure your LLM provider
 ```
 
-Then run `python3 main.py desk` — the floating orb appears. Click it to open chat, press Ctrl+Shift+T to toggle.
+Then run `python3 main.py desk` — the server starts and the Godot character window opens.
 
 See [Installation](docs/content/getting-started/installation.md) for prerequisites and manual setup.
 
@@ -27,8 +27,8 @@ See [Installation](docs/content/getting-started/installation.md) for prerequisit
 | Command | Description |
 |---------|-------------|
 | `bash setup.sh` | One-command dev environment setup |
-| `bash build.sh` | Build Tauri desktop binary into `build/` |
-| `python3 main.py desk` | Launch desktop app (spawns server + Tauri) |
+| `bash build.sh` | Export Godot desktop binary into `build/` |
+| `python3 main.py desk` | Launch desktop app (spawns server + Godot) |
 | `python3 main.py serve` | Web UI only (http://localhost:7337) |
 | `python3 main.py onboard` | First-time LLM configuration |
 | `python3 main.py tanu` | Voice assistant mode |
@@ -42,21 +42,17 @@ See [Installation](docs/content/getting-started/installation.md) for prerequisit
 ┌─────────────────────────────────────────────────────┐
 │  python main.py desk                                │
 │  ┌──────────────────────┐  ┌─────────────────────┐  │
-│  │ Python Server        │  │ Tauri Desktop       │  │
+│  │ Python Server        │  │ Godot 4 Client      │  │
 │  │ (subprocess, :7337)  │  │ (subprocess)        │  │
-│  │ AgentLoop + Tools    │◄─┤ Rust backend        │  │
-│  │ + LLM                │  │ spawns & manages    │  │
-│  └──────────┬───────────┘  │ window + tray +     │  │
-│             │ fetch/SSE    │ hotkey              │  │
-│             ▼              └─────────────────────┘  │
-│  ┌──────────────────────┐                            │
-│  │ Vanilla JS Frontend  │                            │
-│  │ (HTML/CSS/JS)        │                            │
-│  └──────────────────────┘                            │
+│  │ AgentLoop + Tools    │◄─┤ WebSocket client    │  │
+│  │ + LLM                │  │ Animated character  │  │
+│  │                      │  │ + chat UI           │  │
+│  │  HTTP + WebSocket    │  │                     │  │
+│  └──────────────────────┘  └─────────────────────┘  │
 └─────────────────────────────────────────────────────┘
 ```
 
-The Python server runs as a subprocess spawned by `python main.py desk`. The Tauri Rust backend also spawns a server subprocess when launched directly. The frontend communicates with the server over HTTP/SSE on `localhost:7337`.
+The Python server runs as a subprocess spawned by `python main.py desk`. The Godot client connects via WebSocket on `ws://localhost:7337/ws/chat` for real-time streaming chat.
 
 ---
 
@@ -67,14 +63,14 @@ Tanu/
 ├── main.py                  # CLI entry points
 ├── src/
 │   ├── tanu/                # Tanu Python package (config, tools, plugins)
-│   └── ui/                  # Tauri v2 desktop app (frontend + Rust)
+│   └── godot/               # Godot 4 project (character UI + WebSocket client)
 ├── bujji/                   # Agent framework (git submodule)
 ├── docs/                    # MkDocs documentation
 ├── build.sh / build.ps1    # Build scripts (produce build/)
 ├── setup.sh / setup.ps1    # Dev environment setup scripts
 ├── config/                  # Local configuration (gitignored)
 ├── workspace/               # Runtime data (gitignored)
-└── build/                   # Tauri binary output (gitignored)
+└── build/                   # Godot binary output (gitignored)
 ```
 
 ---

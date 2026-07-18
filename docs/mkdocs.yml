@@ -1,5 +1,5 @@
 site_name: Tanu
-site_description: Floating desktop AI assistant — Tauri + bujji
+site_description: Desktop AI assistant — Godot 4 + bujji
 repo_url: https://github.com/MithilSaiReddy/Tanu
 edit_uri: edit/main/docs/content/
 docs_dir: content
@@ -34,7 +34,6 @@ nav:
     - Components: architecture/components.md
     - Data Flow: architecture/data-flow.md
   - Guide:
-    - Tauri Desktop App: guide/tauri-ui.md
     - Server API: guide/server-api.md
     - Gmail Integration: guide/gmail-integration.md
     - Tool System: guide/tool-system.md

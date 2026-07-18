@@ -42,9 +42,9 @@ realtimesst.log
 # --- Script artifacts ---
 test_deskbot.sh
 
-# --- Tauri / Rust ---
-src/ui/src-tauri/target/
-src/ui/src-tauri/gen/
+# --- Godot ---
+src/godot/.godot/
+src/godot/.import/
 
 # --- MkDocs ---
 /site

@@ -34,6 +34,9 @@ dependencies = [
 voice = [
     "webrtcvad",
 ]
+wakeword = [
+    "openwakeword",
+]
 notify = [
     "plyer",
 ]

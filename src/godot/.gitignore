@@ -1,0 +1,10 @@
+# Godot-specific ignores
+.godot/
+*.import
+export_presets.cfg
+
+# Exported binaries
+*.x86_64
+*.x86_32
+*.apk
+*.pck

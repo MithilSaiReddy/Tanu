@@ -22,7 +22,7 @@ cd Tanu
 .\setup.ps1
 ```
 
-The setup script handles: system dependencies, Rust + Tauri CLI, Python venv + dependencies, submodules, and config.
+The setup script handles: system dependencies, Python venv + dependencies, submodules, and config.
 
 ### Manual Setup
 
@@ -40,18 +40,17 @@ pip install google-auth google-auth-oauthlib google-api-python-client
 
 ## Running in Development
 
-### Desktop App (with hot-reload frontend)
+### Desktop App (with Godot editor)
 
 ```bash
 # Terminal 1: start Python server
 python3 main.py serve
 
-# Terminal 2: start Tauri with hot-reload
-cd src/ui
-cargo tauri dev
+# Terminal 2: open Godot project (has live scene editing)
+godot --path src/godot
 ```
 
-The Tauri app connects to `http://localhost:7337`.
+The Godot editor connects to `ws://localhost:7337/ws/chat`.
 
 ### Desktop App (release binary)
 
@@ -59,7 +58,7 @@ The Tauri app connects to `http://localhost:7337`.
 python3 main.py desk
 ```
 
-This starts both the Python server and the Tauri binary.
+This starts both the Python server and the Godot binary.
 
 ### Server-only
 
@@ -71,25 +70,29 @@ python3 main.py serve
 
 ```
 Tanu/
-├── main.py                 # Entry points (desk, serve, tanu, agent, onboard)
-├── scripts/
-│   └── build_server.py     # PyInstaller entry point for server sidecar
+├── main.py                 # Entry points (desk, serve, tanu, onboard)
 ├── src/
 │   ├── tanu/               # Tanu Python package
 │   │   ├── config.py       # Config loader (injects tool_paths)
 │   │   ├── tools/          # Custom tools (gmail, tasks, reminders, etc.)
 │   │   └── plugins/
 │   │       └── voice/      # Voice assistant plugin
-│   └── ui/                 # Tauri v2 desktop app
-│       ├── src/            # Frontend (HTML/CSS/JS)
-│       └── src-tauri/      # Rust backend (lib.rs)
+│   └── godot/              # Godot 4 project
+│       ├── project.godot   # Godot project config
+│       ├── autoload/
+│       │   └── ws.gd       # WebSocket client singleton
+│       ├── scripts/
+│       │   ├── main.gd     # Main scene controller
+│       │   └── character.gd # Animated character state machine
+│       └── scenes/
+│           └── main.tscn   # Main scene layout
 ├── bujji/                  # Agent framework (git submodule)
 ├── docs/                   # MkDocs documentation
-├── build.sh / build.ps1   # Build scripts (produce binary/)
+├── build.sh / build.ps1   # Build scripts (produce build/)
 ├── setup.sh / setup.ps1   # Dev environment setup
 ├── config/                 # Local config (gitignored)
 ├── workspace/              # Runtime data (gitignored)
-└── binary/                 # Build output (gitignored)
+└── build/                  # Build output (gitignored)
 ```
 
 ## Testing
@@ -97,35 +100,21 @@ Tanu/
 ```bash
 # Python
 python3 -m pytest tests/
-
-# Rust (Tauri tests)
-cd src/ui/src-tauri && cargo test
-
-# Frontend (if tests exist)
-cd src/ui && npm test
 ```
 
 ## Common Development Tasks
 
 ### Add a new API endpoint
 
-1. Edit `bujji/bujji/server.py` — add method to `BujjiServer`
-2. Register the route in `_routes` dict
+1. Edit `bujji/bujji/server.py` — add route to `app.router`
+2. Register the handler function
 3. Restart the server
 
-### Modify the frontend
+### Modify the Godot client
 
-1. Edit `src/ui/src/index.html`, `main.js`, or `styles.css`
-2. Run `cargo tauri build` to rebuild the binary
-3. Or use `cargo tauri dev` for hot-reload
-
-### Modify the Rust backend
-
-1. Edit `src/ui/src-tauri/src/lib.rs`
-2. Add `#[tauri::command]` function
-3. Register in `invoke_handler`
-4. Add permission in `capabilities/default.json` if needed
-5. Run `cargo tauri build`
+1. Edit files in `src/godot/`
+2. Run the Godot editor: `godot --path src/godot`
+3. Changes to GDScript files are picked up on scene reload
 
 ### Add a new tool
 

@@ -1,27 +1,25 @@
 # Tanu
 
-**Floating desktop AI assistant** — a lightweight, always-on companion powered by the
-[bujji](https://github.com/anomalyco/bujji) agent framework and wrapped in a
-[Tauri v2](https://v2.tauri.app) desktop window.
+**Desktop AI assistant** — a lightweight, always-on companion powered by the
+[bujji](https://github.com/anomalyco/bujji) agent framework with a
+[Godot 4](https://godotengine.org) animated character UI.
 
 |                   |                                                    |
 |-------------------|----------------------------------------------------|
-| **Frontend**      | Tauri v2 (Rust + vanilla HTML/CSS/JS)              |
-| **Backend**       | Python — bujji server (bundled as Tauri sidecar)   |
+| **Frontend**      | Godot 4 (GDScript, WebSocket client)              |
+| **Backend**       | Python — aiohttp server with WebSocket endpoint    |
 | **LLM Provider**  | OpenAI / OpenRouter / Ollama / any OpenAI-compatible |
 | **Voice**         | Deskbot integration (optional)                     |
-| **Window modes**  | Floating orb (60×60) ↔ Chat panel (400×600)        |
+| **Input**         | Wake word detection (always listening)             |
 
 ## Features
 
-- **Dual-mode window** — compact floating orb that expands into a full chat panel
-- **Native drag** — moves via the window manager, clamped to screen bounds
-- **Always-on-top** — stays visible over all applications (toggle via Ctrl+Shift+T)
-- **Streaming responses** — real-time token-by-token LLM output
+- **Animated character** — procedurally drawn face with idle, listening, thinking, and speaking states
+- **Streaming responses** — real-time token-by-token LLM output over WebSocket
+- **Always-on-top** — stays visible over all applications
 - **Tool system** — web search, file operations, shell, Gmail, todos, and more
 - **Gmail integration** — OAuth2 flow, read inbox, search, send emails
-- **Hotkey** — Ctrl+Shift+T toggles between floating orb and chat panel
-- **Position memory** — remembers where you placed the window in each mode
+- **WebSocket protocol** — low-latency bidirectional communication
 
 ## Quick Links
 
@@ -30,4 +28,4 @@
 - [Quick Start](getting-started/quickstart.md) — configure, build, launch
 - [Building](development/building.md) — build.sh pipeline, binary output
 - [Setup](development/setup.md) — dev environment setup
-- [Architecture Overview](architecture/overview.md) — sidecar model, key paths
+- [Architecture Overview](architecture/overview.md) — server + Godot client model

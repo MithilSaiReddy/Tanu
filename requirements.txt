@@ -4,8 +4,12 @@
 
 # Core dependencies
 requests
+aiohttp
 sounddevice
 piper-tts
+
+# Optional: Wake word detection
+openwakeword
 
 # Optional: Gmail
 google-auth

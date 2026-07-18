@@ -1,0 +1,73 @@
+[gd_scene format=3 uid="uid://du4xubn2e84ud"]
+
+[ext_resource type="Script" uid="uid://1lwnxgh1hfpx" path="res://scripts/main.gd" id="1_main"]
+[ext_resource type="Script" uid="uid://dsfa3p18sdmfe" path="res://scripts/character.gd" id="2_character"]
+
+[node name="Main" type="Control" unique_id=1503868945]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_main")
+
+[node name="Background" type="ColorRect" parent="." unique_id=1241735660]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.08, 0.08, 0.12, 1)
+
+[node name="Character" type="Node2D" parent="." unique_id=982757133]
+script = ExtResource("2_character")
+
+[node name="UI" type="MarginContainer" parent="." unique_id=1807849812]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="VBox" type="VBoxContainer" parent="UI" unique_id=876385351]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="TopBar" type="HBoxContainer" parent="UI/VBox" unique_id=1236744875]
+layout_mode = 2
+
+[node name="ConnectionDot" type="ColorRect" parent="UI/VBox/TopBar" unique_id=302783108]
+custom_minimum_size = Vector2(10, 10)
+layout_mode = 2
+color = Color(1, 0, 0, 1)
+
+[node name="StatusLabel" type="Label" parent="UI/VBox/TopBar" unique_id=1987008666]
+layout_mode = 2
+text = "Connecting..."
+
+[node name="Spacer" type="Control" parent="UI/VBox" unique_id=1783245115]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ResponseLabel" type="RichTextLabel" parent="UI/VBox" unique_id=1272519778]
+layout_mode = 2
+size_flags_vertical = 3
+bbcode_enabled = true
+scroll_following = true
+
+[node name="InputRow" type="HBoxContainer" parent="UI/VBox" unique_id=662038960]
+layout_mode = 2
+
+[node name="InputField" type="LineEdit" parent="UI/VBox/InputRow" unique_id=317971649]
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "Type a message..."
+
+[node name="SendButton" type="Button" parent="UI/VBox/InputRow" unique_id=596208752]
+layout_mode = 2
+text = "Send"

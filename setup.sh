@@ -65,14 +65,21 @@ if [ -z "$PYTHON" ]; then
 fi
 log "Python: $($PYTHON --version)"
 
-if command -v rustc &>/dev/null; then
-    log "Rust:   $(rustc --version)"
-else
-    RUST_INSTALLED=false
-fi
+# Check for Godot 4
+GODOT=""
+for bin in godot godot4; do
+    if command -v "$bin" &>/dev/null; then
+        GODOT="$bin"
+        break
+    fi
+done
 
-if command -v cargo &>/dev/null; then
-    log "Cargo:  $(cargo --version)"
+if [ -z "$GODOT" ]; then
+    warn "Godot 4 not found in PATH."
+    warn "  Download: https://godotengine.org/download"
+    warn "  The desktop UI (python main.py desk) requires Godot."
+else
+    log "Godot:  $($GODOT --version 2>/dev/null || echo 'found')"
 fi
 
 # ─────────────────────────────────────────────────────────────
@@ -85,33 +92,19 @@ install_sysdeps() {
         case "${DISTRO:-}" in
             debian|ubuntu|pop|mint|elementary|zorin)
                 sudo apt update
-                sudo apt install -y build-essential libwebkit2gtk-4.1-dev \
-                    libgtk-3-dev libayatana-appindicator3-dev \
-                    librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
-                    portaudio19-dev pulseaudio
+                sudo apt install -y portaudio19-dev pulseaudio
                 ;;
             fedora)
-                sudo dnf groupinstall -y "C Development Tools and Libraries"
-                sudo dnf install -y webkit2gtk4.1-devel gtk3-devel \
-                    libappindicator-gtk3-devel librsvg2-devel \
-                    libsoup3-devel javascriptcoregtk4.1-devel \
-                    portaudio-devel pulseaudio
+                sudo dnf install -y portaudio-devel pulseaudio
                 ;;
             arch|manjaro|endeavour)
-                sudo pacman -S --needed base-devel webkit2gtk-4.1 gtk3 \
-                    libappindicator-gtk3 librsvg libsoup3 \
-                    portaudio pulseaudio
+                sudo pacman -S --needed portaudio pulseaudio
                 ;;
             opensuse*|suse)
-                sudo zypper install -y -t pattern devel_basis
-                sudo zypper install -y webkit2gtk4_1-devel gtk3-devel \
-                    libappindicator-gtk3-devel librsvg-devel \
-                    libsoup3-devel javascriptcoregtk4_1-devel \
-                    portaudio-devel pulseaudio
+                sudo zypper install -y portaudio-devel pulseaudio
                 ;;
             *)
-                warn "Unknown distro. Install Tauri deps manually:"
-                warn "  https://v2.tauri.app/start/prerequisites/"
+                warn "Unknown distro. Install portaudio manually."
                 ;;
         esac
     elif [ "$OS" = "macos" ]; then
@@ -122,14 +115,7 @@ install_sysdeps() {
             brew install portaudio
         fi
     elif [ "$OS" = "windows" ]; then
-        warn "Skip system deps — install manually if needed:"
-        warn "  1. Visual Studio Build Tools (with C++ workload)"
-        warn "     https://visualstudio.microsoft.com/visual-cpp-build-tools/"
-        warn "  2. WebView2 (included in Win 10 1803+)"
-        warn "     https://developer.microsoft.com/microsoft-edge/webview2/"
-        warn ""
-        warn "    Or install via winget (recommended):"
-        warn "      winget install Microsoft.VisualStudio.2022.BuildTools"
+        warn "System deps: install manually if needed."
     fi
 }
 
@@ -140,25 +126,7 @@ elif [ "$OS" = "macos" ] || [ "$OS" = "windows" ]; then
 fi
 
 # ─────────────────────────────────────────────────────────────
-# 4. Install Rust + Tauri CLI
-# ─────────────────────────────────────────────────────────────
-if [ "${RUST_INSTALLED:-}" = "false" ]; then
-    info "Installing Rust via rustup..."
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-    source "$HOME/.cargo/env"
-    log "Rust installed: $(rustc --version)"
-fi
-
-if ! command -v cargo-tauri &>/dev/null; then
-    info "Installing Tauri CLI (cargo install tauri-cli)..."
-    cargo install tauri-cli --version "^2"
-    log "Tauri CLI installed: $(cargo tauri --version)"
-else
-    log "Tauri CLI: $(cargo tauri --version)"
-fi
-
-# ─────────────────────────────────────────────────────────────
-# 5. Initialize git submodules
+# 4. Initialize git submodules
 # ─────────────────────────────────────────────────────────────
 if [ -f .gitmodules ]; then
     info "Initializing git submodules..."
@@ -167,7 +135,7 @@ if [ -f .gitmodules ]; then
 fi
 
 # ─────────────────────────────────────────────────────────────
-# 6. Create Python virtual environment
+# 5. Create Python virtual environment
 # ─────────────────────────────────────────────────────────────
 if [ -d venv ]; then
     warn "Virtual environment 'venv' already exists (skipping)"
@@ -190,7 +158,7 @@ pip install --quiet -r requirements.txt
 log "Python dependencies installed"
 
 # ─────────────────────────────────────────────────────────────
-# 7. Create local config if missing
+# 6. Create local config if missing
 # ─────────────────────────────────────────────────────────────
 mkdir -p config
 
@@ -229,7 +197,7 @@ else
 fi
 
 # ─────────────────────────────────────────────────────────────
-# 8. Create workspace directories
+# 7. Create workspace directories
 # ─────────────────────────────────────────────────────────────
 mkdir -p workspace/tanu
 
@@ -243,7 +211,7 @@ done
 log "Workspace directories ready"
 
 # ─────────────────────────────────────────────────────────────
-# 9. Summary & next steps
+# 8. Summary & next steps
 # ─────────────────────────────────────────────────────────────
 echo ""
 echo "  ┌────────────────────────────────────┐"
