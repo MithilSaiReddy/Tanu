@@ -1,5 +1,5 @@
 """
-tanu - Voice assistant for DeskBot
+tanu — ultra-lightweight personal AI assistant for DeskBot.
 
 A calm, sharp, slightly witty personal assistant.
 """
@@ -9,13 +9,28 @@ __author__ = "Mithil Reddy"
 
 LOGO = "🎙️"
 
-from tanu.plugins.voice.deskbot import DeskbotConnection
-from tanu.config import load_config, get_asset_path
+from tanu.config import (
+    get_active_provider,
+    get_asset_path,
+    get_deskbot_config,
+    load_config,
+    save_config,
+    workspace_path,
+)
+from tanu.agent import AgentLoop, CronService, HeartbeatService
+from tanu.session import SessionManager
 
 __all__ = [
     "__version__",
     "LOGO",
-    "DeskbotConnection",
     "load_config",
+    "save_config",
+    "get_active_provider",
+    "workspace_path",
     "get_asset_path",
+    "get_deskbot_config",
+    "AgentLoop",
+    "HeartbeatService",
+    "CronService",
+    "SessionManager",
 ]

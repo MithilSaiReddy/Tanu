@@ -126,16 +126,7 @@ elif [ "$OS" = "macos" ] || [ "$OS" = "windows" ]; then
 fi
 
 # ─────────────────────────────────────────────────────────────
-# 4. Initialize git submodules
-# ─────────────────────────────────────────────────────────────
-if [ -f .gitmodules ]; then
-    info "Initializing git submodules..."
-    git submodule update --init --recursive
-    log "Submodules initialized"
-fi
-
-# ─────────────────────────────────────────────────────────────
-# 5. Create Python virtual environment
+# 4. Create Python virtual environment
 # ─────────────────────────────────────────────────────────────
 if [ -d venv ]; then
     warn "Virtual environment 'venv' already exists (skipping)"
@@ -158,7 +149,7 @@ pip install --quiet -r requirements.txt
 log "Python dependencies installed"
 
 # ─────────────────────────────────────────────────────────────
-# 6. Create local config if missing
+# 5. Create local config if missing
 # ─────────────────────────────────────────────────────────────
 mkdir -p config
 

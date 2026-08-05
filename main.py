@@ -21,11 +21,8 @@ from pathlib import Path
 # Add src to path for imports
 _script_dir = os.path.dirname(os.path.abspath(__file__))
 _src_path = os.path.join(_script_dir, "src")
-_bujji_path = os.path.join(_script_dir, "bujji")
-_paths_to_add = [_src_path, _bujji_path]
-for p in _paths_to_add:
-    if os.path.isdir(p) and p not in sys.path:
-        sys.path.insert(0, p)
+if _src_path not in sys.path:
+    sys.path.insert(0, _src_path)
 
 import argparse
 import multiprocessing
@@ -35,17 +32,17 @@ import time
 import signal
 import webbrowser
 
-from bujji import LOGO as BUJJI_LOGO
-from bujji.config import load_config, workspace_path, get_active_provider
-from bujji.identity import ensure_identity_files
-from bujji.session import SessionManager
-from bujji.agent import HeartbeatService, CronService
+from tanu import LOGO as TANU_LOGO
+from tanu.config import load_config, workspace_path, get_active_provider
+from tanu.identity import ensure_identity_files
+from tanu.session import SessionManager
+from tanu.agent import HeartbeatService, CronService
 
 
 def cmd_onboard(args):
-    from bujji.config import load_config, PROVIDER_DEFAULTS, save_config
+    from tanu.config import load_config, PROVIDER_DEFAULTS, save_config
 
-    print(f"\n{BUJJI_LOGO} Welcome to Tanu\n")
+    print(f"\n{TANU_LOGO} Welcome to Tanu\n")
     cfg = load_config()
 
     print("Available LLM providers:")
@@ -148,15 +145,15 @@ def cmd_tanu_text(cfg, mgr):
 
 def cmd_serve(args):
     from tanu.config import load_config
-    from bujji.server import run_server
+    from tanu.server import run_server
     cfg = load_config()
     port = getattr(args, "port", 7337) or 7337
     run_server(cfg, port=port, quiet=True)
 
 
 def cmd_status(args):
-    from bujji import __version__
-    from bujji.config import load_config
+    from tanu import __version__
+    from tanu.config import load_config
 
     cfg = load_config()
     pname, api_key, api_base, model = get_active_provider(cfg)
@@ -170,9 +167,9 @@ def cmd_status(args):
 
 
 def _run_server(port: int):
-    """Run the bujji server in a subprocess (quiet, API-only, no browser)."""
+    """Run the tanu server in a subprocess (quiet, API-only, no browser)."""
     from tanu.config import load_config
-    from bujji.server import run_server
+    from tanu.server import run_server
     cfg = load_config()
     run_server(cfg, port=port, quiet=True)
 
@@ -182,6 +179,8 @@ def cmd_desk(args):
 
     GODOT_BINS = [
         ROOT / "build" / "tanu-godot",
+        ROOT / "build" / "tanu-godot-arm64",
+        ROOT / "build" / "tanu",
         ROOT / "src" / "godot" / "build" / "tanu",
         ROOT / "build" / "tanu-godot.x86_64",
     ]

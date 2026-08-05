@@ -24,7 +24,7 @@ Run the onboarding wizard:
 python3 main.py onboard
 ```
 
-It will prompt for your preferred provider and API key. Or edit `~/.bujji/config.json`
+It will prompt for your preferred provider and API key. Or edit `~/.tanu/config.json`
 directly (see [Configuration](configuration.md)).
 
 ## 2. Install Gmail Dependencies (Optional)

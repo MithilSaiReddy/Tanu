@@ -1,5 +1,4 @@
-# Tanu package (bujji is now a git submodule — init with: git submodule update --init)
--e bujji
+# Tanu package (unified — agent framework, tools, server, UI all under src/tanu/)
 -e .
 
 # Core dependencies

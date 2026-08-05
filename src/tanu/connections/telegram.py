@@ -1,5 +1,5 @@
 """
-bujji/connections/telegram.py  —  v2
+tanu/connections/telegram.py  —  v2
 
 Key improvements:
 • Uses SessionManager — one AgentLoop per chat_id (not a new one per message)
@@ -15,7 +15,7 @@ import time
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from bujji.session import SessionManager
+    from tanu.session import SessionManager
 
 try:
     import requests as _requests
@@ -23,7 +23,7 @@ try:
 except ImportError:
     _HAS_REQUESTS = False
 
-LOGO = "🦞"
+LOGO = "🎙️"
 
 class TelegramChannel:
 

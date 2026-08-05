@@ -1,6 +1,6 @@
 # Tanu
 
-**Desktop AI assistant** — a lightweight, always-on companion powered by the [bujji](https://github.com/anomalyco/bujji) agent framework with a [Godot 4](https://godotengine.org) animated character UI.
+**Desktop AI assistant** — a lightweight, always-on companion with a self-contained Python agent framework (server, tools, voice — all under `src/tanu/`) and a [Godot 4](https://godotengine.org) animated character UI.
 
 [![Docs](https://img.shields.io/badge/docs-mkdocs-blue)](https://mithilsaireddy.github.io/Tanu/)
 
@@ -9,7 +9,7 @@
 ## Quick Start
 
 ```bash
-git clone --recurse-submodules https://github.com/MithilSaiReddy/Tanu
+git clone https://github.com/MithilSaiReddy/Tanu
 cd Tanu
 bash setup.sh           # installs everything
 bash build.sh           # exports the Godot desktop app
@@ -62,9 +62,8 @@ The Python server runs as a subprocess spawned by `python main.py desk`. The God
 Tanu/
 ├── main.py                  # CLI entry points
 ├── src/
-│   ├── tanu/                # Tanu Python package (config, tools, plugins)
+│   ├── tanu/                # Tanu package (agent framework, server, tools, voice)
 │   └── godot/               # Godot 4 project (character UI + WebSocket client)
-├── bujji/                   # Agent framework (git submodule)
 ├── docs/                    # MkDocs documentation
 ├── build.sh / build.ps1    # Build scripts (produce build/)
 ├── setup.sh / setup.ps1    # Dev environment setup scripts

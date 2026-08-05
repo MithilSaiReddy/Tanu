@@ -1,16 +1,16 @@
 # Configuration
 
-Tanu uses a JSON configuration file located at `~/.bujji/config.json`.
+Tanu uses a JSON configuration file located at `~/.tanu/config.json`.
 
 ## Configuration File Location
 
 | Source | Path |
 |--------|------|
-| Default config | `~/.bujji/config.json` |
+| Default config | `~/.tanu/config.json` |
 | Project config | `config/config.json` (in repo root) |
 
-The config is loaded from `~/.bujji/config.json`. During development you may copy
-`config/config.json` to `~/.bujji/config.json`.
+The config is loaded from `~/.tanu/config.json`. During development you may copy
+`config/config.json` to `~/.tanu/config.json`.
 
 ## Structure
 

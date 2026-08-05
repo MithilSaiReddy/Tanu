@@ -1,5 +1,5 @@
 """
-bujji/tools/tanu_query.py
+tanu/tools/tanu_query.py
 
 Quick query tools for Tanu.
 Simple, fast operations that don't need the LLM.
@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from bujji.tools.base import ToolContext, param, register_tool
+from tanu.tools.base import ToolContext, param, register_tool
 
 
 CONVERSIONS = {

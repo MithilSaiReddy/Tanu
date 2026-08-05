@@ -59,7 +59,7 @@ The client connects to `ws://localhost:7337/ws/chat` and exchanges JSON messages
 
 ---
 
-## Python Server (`main.py` + `bujji/`)
+## Python Server (`main.py` + `src/tanu/`)
 
 ### Entry Points (`main.py`)
 
@@ -76,11 +76,11 @@ The `desk` command:
 2. Launches the Godot binary
 3. Cleans up both processes on Ctrl+C or exit
 
-**Config loading**: Both `desk` and `serve` use `tanu.config.load_config()`
-(instead of `bujji.config.load_config()`) to ensure `tool_paths` is injected
-for custom tool discovery.
+**Config loading**: Both `desk` and `serve` use `tanu.config.load_config()`,
+which merges on-disk config over defaults and injects `tool_paths` for
+custom tool discovery.
 
-### Server (`bujji/bujji/server.py`)
+### Server (`src/tanu/server.py`)
 
 HTTP + WebSocket server on `localhost:7337`:
 
@@ -96,7 +96,7 @@ HTTP + WebSocket server on `localhost:7337`:
 | GET | `/api/gmail/status` | Check if Gmail token file exists |
 | GET | `/api/gmail/disconnect` | Delete Gmail token file |
 
-### Agent Framework (`bujji/bujji/agent.py`)
+### Agent Framework (`src/tanu/agent.py`)
 
 The `AgentLoop` class orchestrates LLM calls and tool execution:
 
@@ -112,7 +112,7 @@ The `AgentLoop` class orchestrates LLM calls and tool execution:
 
 See [Tool System](../guide/tool-system.md) for details.
 
-### Built-in tools (`bujji/bujji/tools/`)
+### Built-in tools (`src/tanu/tools/`)
 
 File operations, shell, web search, memory, todos, sub-agents, utilities.
 

@@ -1,5 +1,5 @@
 """
-bujji/connections/display.py
+tanu/plugins/voice/display.py
 
 Display abstraction for deskbot. NullDisplay is always available (no-op).
 LCDDisplay uses luma.lcd for ST7789 displays.
@@ -166,7 +166,7 @@ class LCDDisplay(BaseDisplay):
 
     def _render_idle(self) -> None:
         self._draw.text((20, 60), "🖥️", font=self._font, fill="gray")
-        self._draw.text((20, 110), "Say hey bujji", font=self._font, fill="white")
+        self._draw.text((20, 110), "Say hey Tanu", font=self._font, fill="white")
         self._draw.text((20, 180), "listening...", font=self._font_small, fill="gray")
 
     def _render_partial(self, text: str) -> None:

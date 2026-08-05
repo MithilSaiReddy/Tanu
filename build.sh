@@ -5,20 +5,34 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 GODOT_DIR="$SCRIPT_DIR/src/godot"
 BUILD_DIR="$SCRIPT_DIR/build"
 
-echo "==> Building Tanu Desktop App (Godot)"
-echo ""
+# Parse target
+TARGET="${1:-x86_64}"
+
+usage() {
+    echo "Usage: bash build.sh [TARGET]"
+    echo ""
+    echo "Targets:"
+    echo "  x86_64      Build Godot x86_64 (default)"
+    echo "  arm64       Build Godot arm64"
+    echo "  all-in-one  Build arm64 + server source + scripts for Radxa deployment"
+    echo ""
+    exit 0
+}
+
+if [ "${TARGET}" = "--help" ] || [ "${TARGET}" = "-h" ]; then
+    usage
+fi
 
 # Find Godot binary
-GODOT=""
-for bin in godot godot4; do
-    if command -v "$bin" &>/dev/null; then
-        GODOT="$bin"
-        break
-    fi
-done
+find_godot() {
+    GODOT=""
+    for bin in godot godot4; do
+        if command -v "$bin" &>/dev/null; then
+            GODOT="$bin"
+            return
+        fi
+    done
 
-# Check common install paths
-if [ -z "$GODOT" ]; then
     for path in \
         "$HOME/Documents/Godot_v4"*"linux.x86_64" \
         "$HOME/.local/bin/godot" \
@@ -27,11 +41,13 @@ if [ -z "$GODOT" ]; then
         for p in $path; do
             if [ -x "$p" ]; then
                 GODOT="$p"
-                break 2
+                return
             fi
         done
     done
-fi
+}
+
+find_godot
 
 if [ -z "$GODOT" ]; then
     echo "ERROR: Godot 4 not found."
@@ -44,60 +60,96 @@ if [ -z "$GODOT" ]; then
     exit 1
 fi
 
-if [ -n "${GODOT:-}" ] && [ -x "${GODOT:-}" ]; then
-    echo "Using Godot: $GODOT"
-else
-    echo "Using Godot: $GODOT"
-fi
-
-# Build the Godot project
+echo "Using Godot: $GODOT"
 echo ""
-echo "==> Exporting Godot project..."
-mkdir -p "$BUILD_DIR"
 
-# Check if export preset exists
-if [ ! -f "$GODOT_DIR/export_presets.cfg" ]; then
-    echo "Creating export_presets.cfg..."
-    cat > "$GODOT_DIR/export_presets.cfg" << 'PRESETS_EOF'
-[preset.0]
+# Export Godot for a given architecture
+export_godot() {
+    local preset_name="$1"
+    local output_name="$2"
 
-name="Linux"
-platform="Linux"
-runnable=true
-dedicated_server=false
-custom_features=""
-export_filter="all_resources"
-include_filter=""
-exclude_filter=""
+    echo "==> Exporting Godot ($preset_name)..."
+    mkdir -p "$BUILD_DIR"
 
-export_path="tanu"
+    "$GODOT" --headless --path "$GODOT_DIR" --export-release "$preset_name" "$BUILD_DIR/$output_name" 2>&1 || {
+        echo ""
+        echo "Export failed. Make sure you have export templates installed."
+        echo "  Godot Editor -> Manage Export Templates -> Download"
+        echo ""
+        echo "Alternative: open the project in Godot editor and export manually:"
+        echo "  $GODOT --path $GODOT_DIR"
+        exit 1
+    }
 
-[preset.0.options]
-
-custom_template/debug=""
-custom_template/release=""
-debug/export_console_wrapper=1
-binary_format/embed_pck=true
-texture_format/s3tc_bptc=true
-texture_format/etc2_astc=false
-binary_format/architecture="x86_64"
-ssh_remote_deploy/enabled=false
-PRESETS_EOF
-fi
-
-"$GODOT" --headless --path "$GODOT_DIR" --export-release "Linux" "$BUILD_DIR/tanu-godot" 2>&1 || {
-    echo ""
-    echo "Export failed. Make sure you have export templates installed."
-    echo "  Godot Editor -> Manage Export Templates -> Download"
-    echo ""
-    echo "Alternative: open the project in Godot editor and export manually:"
-    echo "  $GODOT --path $GODOT_DIR"
-    exit 1
+    chmod +x "$BUILD_DIR/$output_name" 2>/dev/null || true
+    echo "    Output: $BUILD_DIR/$output_name"
 }
 
-chmod +x "$BUILD_DIR/tanu-godot" 2>/dev/null || true
+# Copy server source for packaging
+copy_server() {
+    local dest="$1"
+    echo "==> Copying server source..."
+    mkdir -p "$dest/server"
+    cp "$SCRIPT_DIR/main.py" "$dest/server/"
+    cp "$SCRIPT_DIR/requirements.txt" "$dest/server/"
+    cp "$SCRIPT_DIR/pyproject.toml" "$dest/server/"
+    mkdir -p "$dest/server/src"
+    cp -r "$SCRIPT_DIR/src/tanu" "$dest/server/src/"
+    # Remove __pycache__ and .pyc
+    find "$dest/server" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+    find "$dest/server" -name "*.pyc" -delete 2>/dev/null || true
+    echo "    Server source copied to $dest/server/"
+}
 
-echo ""
-echo "Build complete!"
-echo "  Binary:  $BUILD_DIR/tanu-godot"
-echo "  Run:     python main.py desk"
+case "$TARGET" in
+    x86_64)
+        export_godot "Linux" "tanu-godot"
+        echo ""
+        echo "Build complete! Run: python main.py desk"
+        ;;
+    arm64)
+        export_godot "Linux ARM64" "tanu-godot-arm64"
+        echo ""
+        echo "Build complete! Binary: build/tanu-godot-arm64"
+        ;;
+    all-in-one)
+        export_godot "Linux ARM64" "tanu-godot-arm64"
+        echo ""
+
+        # Create package directory
+        PACKAGE_DIR="$BUILD_DIR/tanu-cubie"
+        rm -rf "$PACKAGE_DIR"
+        mkdir -p "$PACKAGE_DIR"
+
+        # Move Godot binary into package
+        mv "$BUILD_DIR/tanu-godot-arm64" "$PACKAGE_DIR/"
+
+        # Copy server source
+        copy_server "$PACKAGE_DIR"
+
+        # Copy scripts
+        cp "$SCRIPT_DIR/scripts/launch.sh" "$PACKAGE_DIR/"
+        cp "$SCRIPT_DIR/scripts/first-boot.sh" "$PACKAGE_DIR/"
+        chmod +x "$PACKAGE_DIR/launch.sh" "$PACKAGE_DIR/first-boot.sh"
+
+        # Create tarball
+        tar czf "$BUILD_DIR/tanu-cubie.tar.gz" -C "$BUILD_DIR" tanu-cubie
+
+        echo ""
+        echo "==> All-in-one package ready!"
+        echo "    Directory: $PACKAGE_DIR/"
+        echo "    Tarball:   $BUILD_DIR/tanu-cubie.tar.gz"
+        echo ""
+        echo "Deploy to Radxa Cubie A7Z:"
+        echo "    scp $BUILD_DIR/tanu-cubie.tar.gz user@<radxa-ip>:~/"
+        echo "    ssh user@<radxa-ip>"
+        echo "    tar xzf tanu-cubie.tar.gz && cd tanu-cubie"
+        echo "    ./first-boot.sh    # One-time setup (~5 min)"
+        echo "    ./launch.sh        # Start"
+        ;;
+    *)
+        echo "ERROR: Unknown target '$TARGET'"
+        echo ""
+        usage
+        ;;
+esac

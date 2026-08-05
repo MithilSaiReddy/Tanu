@@ -1,5 +1,5 @@
 """
-bujji/tools/speak_tool.py
+tanu/tools/speak_tool.py
 
 Proactive TTS tool for deskbot. Lets the agent speak spontaneously.
 Uses the main deskbot TTS engine if available, otherwise prints to stdout.
@@ -12,7 +12,7 @@ import queue
 import re
 from typing import Optional
 
-from bujji.tools.base import ToolContext, param, register_tool
+from tanu.tools.base import ToolContext, param, register_tool
 
 LOG = logging.getLogger(__name__)
 

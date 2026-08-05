@@ -25,29 +25,17 @@
 
 ## Git Workflow
 
-This repository uses a git submodule for the `bujji/` framework:
+The Tanu agent framework lives directly in this repository under
+`src/tanu/` — there is no separate framework repository or submodule to maintain.
 
 ```
-Tanu (main repo)
-  └── bujji/ (submodule → github.com/MithilSaiReddy/bujji)
+Tanu (single repo)
+  └── src/
+      └── tanu/   # agent framework + server + tools + voice (maintained here)
 ```
 
-When you make changes that affect both:
-
-1. Commit and push the bujji submodule changes first:
-   ```bash
-   cd bujji
-   git add .
-   git commit -m "description"
-   git push
-   cd ..
-   ```
-
-2. Then commit the main repo (which updates the submodule reference):
-   ```bash
-   git add bujji
-   git commit -m "Update bujji submodule: ..."
-   ```
+When you change the framework, edit `src/tanu/` and commit it like any other
+file in this repository.
 
 ## Pull Request Checklist
 

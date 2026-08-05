@@ -1,7 +1,7 @@
 # Tanu
 
 **Desktop AI assistant** — a lightweight, always-on companion powered by the
-[bujji](https://github.com/anomalyco/bujji) agent framework with a
+a self-contained agent framework with a
 [Godot 4](https://godotengine.org) animated character UI.
 
 |                   |                                                    |

@@ -1,5 +1,5 @@
 """
-bujji/connections/discord.py  —  v2
+tanu/connections/discord.py  —  v2
 Uses SessionManager for persistent per-channel history.
 """
 from __future__ import annotations
@@ -8,9 +8,9 @@ import sys
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from bujji.session import SessionManager
+    from tanu.session import SessionManager
 
-LOGO = "🦞"
+LOGO = "🎙️"
 
 class DiscordChannel:
 

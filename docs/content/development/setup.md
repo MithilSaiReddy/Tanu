@@ -9,7 +9,7 @@ See [Installation](../getting-started/installation.md) for system requirements.
 ### One-Command Setup (Recommended)
 
 ```bash
-git clone --recurse-submodules https://github.com/MithilSaiReddy/Tanu
+git clone https://github.com/MithilSaiReddy/Tanu
 cd Tanu
 bash setup.sh
 ```
@@ -17,17 +17,17 @@ bash setup.sh
 Or on Windows PowerShell:
 
 ```powershell
-git clone --recurse-submodules https://github.com/MithilSaiReddy/Tanu
+git clone https://github.com/MithilSaiReddy/Tanu
 cd Tanu
 .\setup.ps1
 ```
 
-The setup script handles: system dependencies, Python venv + dependencies, submodules, and config.
+The setup script handles: system dependencies, Python venv + dependencies, and config.
 
 ### Manual Setup
 
 ```bash
-git clone --recurse-submodules https://github.com/MithilSaiReddy/Tanu
+git clone https://github.com/MithilSaiReddy/Tanu
 cd Tanu
 
 python3 -m venv venv
@@ -72,9 +72,12 @@ python3 main.py serve
 Tanu/
 ├── main.py                 # Entry points (desk, serve, tanu, onboard)
 ├── src/
-│   ├── tanu/               # Tanu Python package
+│   ├── tanu/               # Tanu Python package (agent, server, tools, voice)
 │   │   ├── config.py       # Config loader (injects tool_paths)
-│   │   ├── tools/          # Custom tools (gmail, tasks, reminders, etc.)
+│   │   ├── server.py       # aiohttp HTTP + WebSocket server
+│   │   ├── agent.py        # AgentLoop, Heartbeat, Cron
+│   │   ├── tools/          # Built-in + custom tools (gmail, tasks, reminders, etc.)
+│   │   ├── connections/    # Telegram / Discord channels
 │   │   └── plugins/
 │   │       └── voice/      # Voice assistant plugin
 │   └── godot/              # Godot 4 project
@@ -86,7 +89,6 @@ Tanu/
 │       │   └── character.gd # Animated character state machine
 │       └── scenes/
 │           └── main.tscn   # Main scene layout
-├── bujji/                  # Agent framework (git submodule)
 ├── docs/                   # MkDocs documentation
 ├── build.sh / build.ps1   # Build scripts (produce build/)
 ├── setup.sh / setup.ps1   # Dev environment setup
@@ -106,7 +108,7 @@ python3 -m pytest tests/
 
 ### Add a new API endpoint
 
-1. Edit `bujji/bujji/server.py` — add route to `app.router`
+1. Edit `src/tanu/server.py` — add route to `app.router`
 2. Register the handler function
 3. Restart the server
 

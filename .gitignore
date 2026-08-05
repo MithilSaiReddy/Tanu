@@ -26,12 +26,14 @@ workspace/USER.md.bak
 workspace/HEARTBEAT.md
 workspace/tanu/
 .env*
-bujji/bujji/config.json
-*bujji/bujji/tools/credentials.json
-*bujji/bujji/tools/gmail_token.json
+src/tanu/config.json
+src/tanu/tools/credentials.json
+src/tanu/tools/gmail_token.json
 
 # --- ML/model files ---
 *models/*
+*src/tanu/assets/whisper.cpp/
+*src/tanu/assets/piper/
 *tools/whisper.cpp/
 *tools/piper/
 

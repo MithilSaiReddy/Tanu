@@ -1,5 +1,5 @@
 """
-tanu/tools/gmail.py — Gmail integration for bujji/Tanu.
+tanu/tools/gmail.py — Gmail integration for tanu/Tanu.
 
 Tools:
     gmail_authenticate   - Two-step OAuth setup
@@ -15,7 +15,7 @@ import json
 import logging
 from pathlib import Path
 
-from bujji.tools.base import ToolContext, param, register_tool
+from tanu.tools.base import ToolContext, param, register_tool
 
 LOG = logging.getLogger(__name__)
 

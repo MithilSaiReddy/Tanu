@@ -1,5 +1,5 @@
 """
-bujji/tools/tanu_task.py
+tanu/tools/tanu_task.py
 
 Task management tools for Tanu.
 Store tasks in workspace/tanu/tasks.json
@@ -19,7 +19,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from bujji.tools.base import ToolContext, param, register_tool
+from tanu.tools.base import ToolContext, param, register_tool
 
 
 TASKS_FILE = "tasks.json"

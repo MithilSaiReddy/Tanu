@@ -1,6 +1,6 @@
 # Tool System
 
-Tanu uses the bujji tool system — a registry of Python functions that the LLM
+Tanu uses a tool system — a registry of Python functions that the LLM
 can invoke autonomously.
 
 ## Architecture
@@ -8,28 +8,27 @@ can invoke autonomously.
 ```
 ToolRegistry
   │
-  ├── Built-in tools (bujji/bujji/tools/)
-  │   ├── file_ops.py       — read, write, append, list, delete files
-  │   ├── shell.py          — execute shell commands
-  │   ├── web.py            — Brave Search / web search
-  │   ├── memory.py         — read/write USER.md
-  │   ├── todo.py           — task breakdown & tracking
-  │   ├── utils.py          — date, time, etc.
-  │   └── subagents.py      — spawn sub-agents
-  │
-  └── Custom tools (src/tanu/tools/)
-      ├── gmail.py          — Gmail: inbox, send, search, get
-      ├── speak_tool.py     — Text-to-speech output
-      ├── tanu_query.py     — Direct agent query
-      ├── tanu_reminder.py  — Reminder scheduling
-      └── tanu_task.py      — Task management
+  └── Tools (src/tanu/tools/)
+      ├── base.py          — ToolRegistry, register_tool, ToolContext
+      ├── file_ops.py      — read, write, append, list, delete files
+      ├── shell.py         — execute shell commands
+      ├── web.py           — Brave Search / web search
+      ├── memory.py        — read/write USER.md
+      ├── todo.py          — task breakdown & tracking
+      ├── utils.py         — date, time, etc.
+      ├── subagents.py     — spawn sub-agents
+      ├── gmail.py         — Gmail: inbox, send, search, get
+      ├── speak_tool.py    — Text-to-speech output
+      ├── tanu_query.py    — Direct agent query
+      ├── tanu_reminder.py — Reminder scheduling
+      └── tanu_task.py     — Task management
 ```
 
 ## How Tools Are Discovered
 
 1. **`@register_tool` decorator** — Each tool function is decorated with metadata:
    ```python
-   from bujji.tools.base import register_tool, param
+   from tanu.tools.base import register_tool, param
 
    @register_tool(
        description="List recent emails from your Gmail inbox",
@@ -72,7 +71,7 @@ Tanu automatically injects `src/tanu/tools/` into `tool_paths` when you use
 ```python
 """My custom tool."""
 
-from bujji.tools.base import register_tool, param
+from tanu.tools.base import register_tool, param
 
 
 @register_tool(

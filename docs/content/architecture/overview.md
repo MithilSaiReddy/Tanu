@@ -47,8 +47,7 @@ WebSocket for real-time bidirectional communication.
 | `src/godot/autoload/ws.gd` | WebSocket client singleton |
 | `src/godot/scripts/character.gd` | Animated character state machine |
 | `src/godot/scripts/main.gd` | Scene controller (input + WS + UI) |
-| `src/tanu/` | Python package: config, tools, voice plugins |
-| `bujji/` | Agent framework (git submodule) |
+| `src/tanu/` | Python package: agent framework, server, tools, voice, connections |
 | `build.sh / build.ps1` | Build scripts (produce build/) |
 | `setup.sh / setup.ps1` | Dev environment setup scripts |
 | `build/` | Godot binary output (gitignored) |

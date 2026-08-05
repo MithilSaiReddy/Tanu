@@ -1,5 +1,5 @@
 """
-bujji/tools/tanu_reminder.py
+tanu/tools/tanu_reminder.py
 
 Reminder tools for Tanu with background worker.
 Store reminders in workspace/tanu/reminders.json
@@ -24,7 +24,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
-from bujji.tools.base import ToolContext, param, register_tool
+from tanu.tools.base import ToolContext, param, register_tool
 
 
 REMINDERS_FILE = "reminders.json"

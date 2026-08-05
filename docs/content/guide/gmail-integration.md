@@ -5,7 +5,7 @@ spans two layers:
 
 | Layer | File | Role |
 |-------|------|------|
-| Server OAuth endpoints | `bujji/bujji/server.py` | Generate auth URL, exchange code → token |
+| Server OAuth endpoints | `src/tanu/server.py` | Generate auth URL, exchange code → token |
 | Tool implementations | `src/tanu/tools/gmail.py` | Functions the LLM calls (inbox, send, search, get) |
 
 ---
@@ -90,7 +90,7 @@ Gmail tool functions read from this same config key.
 
 Where to edit this:
 
-- **Direct file**: Edit `~/.bujji/config.json` (copy from `config/config.json`)
+- **Direct file**: Edit `~/.tanu/config.json` (copy from `config/config.json`)
 - **Server API**: Use `POST /api/config` endpoint
 
 ---
@@ -248,7 +248,7 @@ Tanu: Let me check...
 
 ## Internal Implementation Details
 
-### Server OAuth Code (`bujji/bujji/server.py`)
+### Server OAuth Code (`src/tanu/server.py`)
 
 ```python
 # Module-level cache (holds PKCE code_verifier between requests)

@@ -72,7 +72,7 @@ Download from [godotengine.org](https://godotengine.org/download) — choose the
 ### One-Command Setup (Recommended)
 
 ```bash
-git clone --recurse-submodules https://github.com/MithilSaiReddy/Tanu
+git clone https://github.com/MithilSaiReddy/Tanu
 cd Tanu
 bash setup.sh
 ```
@@ -80,26 +80,22 @@ bash setup.sh
 Or on Windows PowerShell:
 
 ```powershell
-git clone --recurse-submodules https://github.com/MithilSaiReddy/Tanu
+git clone https://github.com/MithilSaiReddy/Tanu
 cd Tanu
 .\setup.ps1
 ```
 
-The `setup.sh` / `setup.ps1` script handles everything: system dependencies, Python venv, submodules, and config.
+The `setup.sh` / `setup.ps1` script handles everything: system dependencies, Python venv, and config.
 
 ### Manual Setup
 
 ```bash
-git clone --recurse-submodules https://github.com/MithilSaiReddy/Tanu
+git clone https://github.com/MithilSaiReddy/Tanu
 cd Tanu
 ```
 
-The `bujji/` submodule is included automatically with `--recurse-submodules`.
-If you already cloned without it:
-
-```bash
-git submodule update --init --recursive
-```
+The Tanu agent framework lives directly in this repo under `src/tanu/`
+— no submodules to initialize.
 
 ---
 

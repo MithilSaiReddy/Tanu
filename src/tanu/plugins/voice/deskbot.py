@@ -1,5 +1,5 @@
 """
-bujji/connections/deskbot.py
+tanu/plugins/voice/deskbot.py
 
 Deskbot voice assistant using whisper.cpp (STT) + piper (TTS).
 Three threads: STT → Agent → TTS
@@ -26,8 +26,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
-    from bujji.connections.display import BaseDisplay
-    from bujji.session import SessionManager
+    from tanu.plugins.voice.display import BaseDisplay
+    from tanu.session import SessionManager
 
 LOG = logging.getLogger(__name__)
 

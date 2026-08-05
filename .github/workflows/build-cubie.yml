@@ -1,0 +1,73 @@
+name: Build for Radxa Cubie A7Z
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Godot
+        run: |
+          wget -q "https://github.com/godotengine/godot/releases/download/4.7.1-stable/Godot_v4.7.1-stable_linux.x86_64.zip"
+          unzip -o Godot_v4.7.1-stable_linux.x86_64.zip
+          mv Godot_v4.7.1-stable_linux.x86_64 /usr/local/bin/godot
+          chmod +x /usr/local/bin/godot
+          godot --version
+
+      - name: Install Export Templates
+        run: |
+          TEMPLATES_DIR="$HOME/.local/share/godot/export_templates/4.7.1.stable"
+          mkdir -p "$TEMPLATES_DIR"
+          wget -q "https://github.com/godotengine/godot/releases/download/4.7.1-stable/Godot_v4.7.1-stable_export_templates.tpz"
+          unzip -o Godot_v4.7.1-stable_export_templates.tpz -d /tmp/templates
+          mv /tmp/templates/templates/* "$TEMPLATES_DIR/"
+          echo "Templates installed:"
+          ls "$TEMPLATES_DIR/" | head -10
+
+      - name: Export Godot arm64
+        run: |
+          mkdir -p build
+          godot --headless --path src/godot --export-release "Linux ARM64" build/tanu-godot-arm64
+
+      - name: Verify binary
+        run: |
+          file build/tanu-godot-arm64
+          ls -lh build/tanu-godot-arm64
+
+      - name: Assemble package
+        run: |
+          PACKAGE="build/tanu-cubie"
+          mkdir -p "$PACKAGE"
+
+          cp build/tanu-godot-arm64 "$PACKAGE/"
+          cp scripts/launch.sh "$PACKAGE/"
+          cp scripts/first-boot.sh "$PACKAGE/"
+
+          mkdir -p "$PACKAGE/server"
+          cp main.py "$PACKAGE/server/"
+          cp requirements.txt "$PACKAGE/server/"
+          cp pyproject.toml "$PACKAGE/server/"
+          mkdir -p "$PACKAGE/server/src"
+          cp -r src/tanu "$PACKAGE/server/src/"
+
+          find "$PACKAGE/server" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+          find "$PACKAGE/server" -name "*.pyc" -delete 2>/dev/null || true
+
+          chmod +x "$PACKAGE/launch.sh" "$PACKAGE/first-boot.sh"
+          tar czf build/tanu-cubie.tar.gz -C build tanu-cubie
+
+          echo "=== Package contents ==="
+          ls -lh "$PACKAGE/"
+          echo ""
+          echo "=== Tarball ==="
+          ls -lh build/tanu-cubie.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tanu-cubie-arm64
+          path: build/tanu-cubie.tar.gz

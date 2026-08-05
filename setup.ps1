@@ -75,16 +75,7 @@ if (-not $NoSystemDeps) {
 }
 
 # ────────────────────────────────────────────────────────────
-# 3. Initialize git submodules
-# ────────────────────────────────────────────────────────────
-if (Test-Path .gitmodules) {
-    Info "Initializing git submodules..."
-    git submodule update --init --recursive
-    Log "Submodules initialized"
-}
-
-# ────────────────────────────────────────────────────────────
-# 5. Create Python virtual environment
+# 4. Create Python virtual environment
 # ────────────────────────────────────────────────────────────
 if (Test-Path venv) {
     Warn "Virtual environment 'venv' already exists (skipping)"
@@ -104,7 +95,7 @@ python -m pip install --quiet -r requirements.txt
 Log "Python dependencies installed"
 
 # ────────────────────────────────────────────────────────────
-# 6. Create local config if missing
+# 5. Create local config if missing
 # ────────────────────────────────────────────────────────────
 New-Item -ItemType Directory -Force -Path config | Out-Null
 

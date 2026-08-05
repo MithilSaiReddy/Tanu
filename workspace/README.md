@@ -4,7 +4,7 @@ Tanu - your personal AI assistant that handles the boring stuff so you can focus
 
 ## Config Location
 
-**Edit config at:** `/home/mithil/Documents/Work/tanu/bujji/bujji/config.json`
+**Edit config at:** `~/.tanu/config.json`
 
 ## Quick Setup
 
@@ -22,7 +22,7 @@ python main.py setup-gmail
 
 ### Google Calendar Setup
 ```bash
-python -m bujji.tools.cal_auth --setup
+python -m tanu.tools.cal_auth --setup
 ```
 
 ---

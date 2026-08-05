@@ -6,11 +6,11 @@ import sys
 import argparse
 from pathlib import Path
 
-from bujji import LOGO as BUJJI_LOGO
+from tanu import LOGO as BUJJI_LOGO
 
 
 def cmd_onboard(args):
-    from bujji.config import load_config, PROVIDER_DEFAULTS, save_config
+    from tanu.config import load_config, PROVIDER_DEFAULTS, save_config
 
     print(f"\n{BUJJI_LOGO} Welcome to Tanu\n")
     cfg = load_config()
@@ -43,8 +43,8 @@ def cmd_onboard(args):
 def cmd_tanu(args):
     cfg = load_tanu_config()
     from tanu.plugins.voice.deskbot import DeskbotConnection
-    from bujji.agent import HeartbeatService, CronService
-    from bujji.session import SessionManager
+    from tanu.agent import HeartbeatService, CronService
+    from tanu.session import SessionManager
 
     ws = Path(cfg["agents"]["defaults"]["workspace"])
     mgr = SessionManager(cfg)
@@ -76,8 +76,8 @@ def cmd_tanu(args):
 
 
 def cmd_status(args):
-    from bujji.config import load_config
-    from bujji import __version__
+    from tanu.config import load_config
+    from tanu import __version__
 
     cfg = load_config()
     pname, api_key, _, model = cfg.get("active_provider"), "", "", ""
