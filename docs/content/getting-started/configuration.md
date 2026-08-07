@@ -61,6 +61,14 @@ LLM provider configurations. Supports any OpenAI-compatible API.
 | `openai` | `gpt-4o` | Direct OpenAI |
 | `ollama` | `llama3` | Local, no `api_key` needed |
 | `anthropic` | `claude-3-5-sonnet-latest` | Anthropic |
+| `mistral` | `mistral-large-latest` | Mistral AI |
+| `groq` | `llama-3.3-70b-versatile` | Fast inference API |
+| `gemini` | `gemini-2.5-flash` | Google Gemini (OpenAI-compatible endpoint) |
+| `deepseek` | `deepseek-chat` | DeepSeek |
+| `xai` | `grok-3` | xAI Grok |
+| `together` | `meta-llama/Llama-3.3-70B-Instruct-Turbo` | Together AI |
+| `cerebras` | `llama-3.3-70b` | Cerebras |
+| `perplexity` | `llama-3.1-sonar-large-128k-online` | Perplexity |
 
 ### `agents.defaults`
 

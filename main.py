@@ -40,29 +40,8 @@ from tanu.agent import HeartbeatService, CronService
 
 
 def cmd_onboard(args):
-    from tanu.config import load_config, PROVIDER_DEFAULTS, save_config
-
-    print(f"\n{TANU_LOGO} Welcome to Tanu\n")
-    cfg = load_config()
-
-    print("Available LLM providers:")
-    for i, (p, (_, model)) in enumerate(PROVIDER_DEFAULTS.items(), 1):
-        print(f"  {i:2}. {p:<12}  default: {model}")
-
-    choice = input("\nChoose provider (Enter = openrouter): ").strip()
-    provider = list(PROVIDER_DEFAULTS.keys())[int(choice) - 1] if choice.isdigit() else "openrouter"
-
-    api_key = input(f"Enter your {provider} API key: ").strip()
-    default_model = PROVIDER_DEFAULTS[provider][1]
-    model = input(f"Model (Enter = {default_model}): ").strip() or default_model
-
-    cfg["providers"][provider] = {"api_key": api_key, "api_base": PROVIDER_DEFAULTS[provider][0]}
-    cfg["agents"]["defaults"]["model"] = model
-    cfg["active_provider"] = provider
-    save_config(cfg)
-
-    print(f"\n✅ Config saved!")
-    print(f"   Run: python main.py tanu\n")
+    from tanu.onboard import run_onboard
+    run_onboard()
 
 
 def cmd_tanu(args):
@@ -172,6 +151,20 @@ def _run_server(port: int):
     from tanu.server import run_server
     cfg = load_config()
     run_server(cfg, port=port, quiet=True)
+
+
+def cmd_update(args):
+    from tanu.updater import run_update
+
+    rc = run_update(
+        check=getattr(args, "check", False),
+        stash=getattr(args, "stash", False),
+        force=getattr(args, "force", False),
+        yes=getattr(args, "yes", False),
+        deps=not getattr(args, "no_deps", False),
+        build=not getattr(args, "no_build", False),
+    )
+    raise SystemExit(rc)
 
 
 def cmd_desk(args):
@@ -295,6 +288,14 @@ def main():
     sub.add_parser("status", help="Show status")
     sub.add_parser("desk", help="Desktop app (Godot + server)")
 
+    p_update = sub.add_parser("update", help="Update Tanu from GitHub")
+    p_update.add_argument("--check", action="store_true", help="Check for updates without pulling")
+    p_update.add_argument("--stash", action="store_true", help="Auto-stash local changes before pulling")
+    p_update.add_argument("--force", action="store_true", help="Skip the dirty-tree check")
+    p_update.add_argument("-y", "--yes", dest="yes", action="store_true", help="Skip the confirmation prompt")
+    p_update.add_argument("--no-deps", dest="no_deps", action="store_true", help="Skip pip reinstall")
+    p_update.add_argument("--no-build", dest="no_build", action="store_true", help="Skip Godot rebuild")
+
     p_tanu = sub.add_parser("tanu", help="Start voice assistant")
     p_tanu.add_argument("--text", dest="text_mode", action="store_true", help="Text mode")
     p_tanu.add_argument("--simulate", action="store_true", help="Simulate voice")
@@ -307,6 +308,7 @@ def main():
         "serve": cmd_serve,
         "status": cmd_status,
         "desk": cmd_desk,
+        "update": cmd_update,
     }
 
     if args.command in cmds:

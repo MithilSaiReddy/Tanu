@@ -1,11 +1,11 @@
 """
 tanu/plugins/voice/deskbot.py
 
-Deskbot voice assistant using whisper.cpp (STT) + piper (TTS).
+Deskbot voice assistant using moonshine (STT) + piper (TTS).
 Three threads: STT → Agent → TTS
 
 Features:
-- subprocess-based STT (whisper.cpp) for low latency
+- subprocess-based STT (moonshine) for low latency
 - piper-tts Python library with persistent model (30x faster TTS)
 - simulate mode for testing without microphone
 """
@@ -118,19 +118,19 @@ class DeskbotConnection:
 
         dc = cfg.get("deskbot", {})
 
-        # Default to local paths (whisper.cpp and piper in Tanu folder)
+        # Default to local paths (moonshine and piper in Tanu folder)
         # Use asset paths from config
         script_dir = Path(__file__).resolve().parent
         src_dir = script_dir.parent.parent  # src/tanu
         tanu_dir = src_dir.parent  # tanu root
         
-        self._whisper_bin = os.path.expanduser(
-            dc.get("whisper_bin", str(src_dir / "assets" / "whisper.cpp" / "build" / "bin" / "main"))
+        self._moonshine_bin = os.path.expanduser(
+            dc.get("moonshine_bin", str(src_dir / "assets" / "moonshine-voice" / "bin" / "moonshine_stt"))
         )
-        self._whisper_model = os.path.expanduser(
-            dc.get("whisper_model", str(src_dir / "assets" / "whisper.cpp" / "models" / "ggml-tiny.en.bin"))
+        self._moonshine_model = os.path.expanduser(
+            dc.get("moonshine_model", str(src_dir / "assets" / "moonshine-voice" / "tiny-streaming-en"))
         )
-        self._whisper_threads = dc.get("whisper_threads", 4)
+        self._moonshine_arch = dc.get("moonshine_arch", 2)
 
         self._piper_bin = os.path.expanduser(
             dc.get("piper_bin", str(src_dir / "assets" / "piper" / "piper"))
@@ -157,7 +157,7 @@ class DeskbotConnection:
         self._running = True
 
         LOG.info(f"[Deskbot] Starting (simulate={self._simulate})")
-        LOG.info(f"[Deskbot] whisper={self._whisper_bin}")
+        LOG.info(f"[Deskbot] moonshine={self._moonshine_bin}")
         LOG.info(f"[Deskbot] piper={self._piper_bin}")
 
         if self._simulate:
@@ -263,7 +263,7 @@ class DeskbotConnection:
         LOG.info("[Simulate] Thread exiting")
 
     def _thread_stt(self) -> None:
-        """Thread 1: STT — use webrtcvad + whisper.cpp subprocess."""
+        """Thread 1: STT — use webrtcvad + moonshine subprocess."""
 
         if self._simulate:
             LOG.info("[Deskbot] STT disabled (simulate mode)")
@@ -281,12 +281,12 @@ class DeskbotConnection:
             LOG.error("[Deskbot] sounddevice not installed: pip install sounddevice")
             return
 
-        if not os.path.exists(self._whisper_bin):
-            LOG.error(f"[Deskbot] whisper.cpp not found: {self._whisper_bin}")
+        if not os.path.exists(self._moonshine_bin):
+            LOG.error(f"[Deskbot] moonshine_stt not found: {self._moonshine_bin}")
             return
 
-        if not os.path.exists(self._whisper_model):
-            LOG.error(f"[Deskbot] whisper model not found: {self._whisper_model}")
+        if not os.path.exists(self._moonshine_model):
+            LOG.error(f"[Deskbot] moonshine model not found: {self._moonshine_model}")
             return
 
         vad = webrtcvad.Vad(2)
@@ -298,7 +298,7 @@ class DeskbotConnection:
         silence_frames = 0
         max_silence = int(600 / frame_duration)
 
-        LOG.info("[Deskbot] STT ready (webrtcvad + whisper.cpp)")
+        LOG.info("[Deskbot] STT ready (webrtcvad + moonshine)")
 
         def callback(indata, frames, time_info, status):
             nonlocal audio_buffer, silence_frames
@@ -334,7 +334,7 @@ class DeskbotConnection:
             LOG.error(f"[Deskbot] STT error: {e}")
 
     def _process_audio_buffer(self, buffer) -> None:
-        """Write audio buffer to WAV and run whisper.cpp."""
+        """Write audio buffer to WAV and run moonshine."""
         import numpy as np
 
         wav_path = "/tmp/deskbot_input.wav"
@@ -353,26 +353,20 @@ class DeskbotConnection:
         try:
             result = subprocess.run(
                 [
-                    self._whisper_bin,
-                    "-t",
-                    str(self._whisper_threads),
-                    "-m",
-                    self._whisper_model,
-                    "-f",
+                    self._moonshine_bin,
+                    "--model-path",
+                    self._moonshine_model,
+                    "--model-arch",
+                    str(self._moonshine_arch),
+                    "--wav-path",
                     wav_path,
-                    "--no-timestamps",
-                    "-otxt",
                 ],
                 capture_output=True,
                 text=True,
                 timeout=30,
             )
 
-            txt_path = wav_path + ".txt"
-            if os.path.exists(txt_path):
-                transcript = Path(txt_path).read_text().strip()
-            else:
-                transcript = result.stdout.strip()
+            transcript = result.stdout.strip()
 
             if transcript and len(transcript) >= 3:
                 LOG.info(f"[STT] {transcript}")

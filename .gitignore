@@ -34,6 +34,7 @@ src/tanu/tools/gmail_token.json
 *models/*
 *src/tanu/assets/whisper.cpp/
 *src/tanu/assets/piper/
+*src/tanu/assets/moonshine-voice/
 *tools/whisper.cpp/
 *tools/piper/
 

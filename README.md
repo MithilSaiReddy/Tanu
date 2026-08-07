@@ -33,6 +33,7 @@ See [Installation](docs/content/getting-started/installation.md) for prerequisit
 | `python3 main.py onboard` | First-time LLM configuration |
 | `python3 main.py tanu` | Voice assistant mode |
 | `python3 main.py status` | Show config & status |
+| `python3 main.py update` | Pull latest from GitHub (`--check` to peek, `--stash` to keep local edits) |
 
 ---
 

@@ -10,34 +10,9 @@ from tanu import LOGO as BUJJI_LOGO
 
 
 def cmd_onboard(args):
-    from tanu.config import load_config, PROVIDER_DEFAULTS, save_config
+    from tanu.onboard import run_onboard
 
-    print(f"\n{BUJJI_LOGO} Welcome to Tanu\n")
-    cfg = load_config()
-
-    print("Available LLM providers:")
-    for i, (p, (_, model)) in enumerate(PROVIDER_DEFAULTS.items(), 1):
-        print(f"  {i:2}. {p:<12}  default: {model}")
-
-    choice = input("\nChoose provider (Enter = openrouter): ").strip()
-    provider = (
-        list(PROVIDER_DEFAULTS.keys())[int(choice) - 1]
-        if choice.isdigit()
-        else "openrouter"
-    )
-
-    api_key = input(f"Enter your {provider} API key: ").strip()
-    model = (
-        input(f"Model (Enter for default): ").strip() or PROVIDER_DEFAULTS[provider][1]
-    )
-
-    cfg["providers"][provider] = {
-        "api_key": api_key,
-        "api_base": PROVIDER_DEFAULTS[provider][0],
-    }
-    cfg["agents"]["defaults"]["model"] = model
-    save_config(cfg)
-    print(f"\n✅ Config saved!\n")
+    run_onboard()
 
 
 def cmd_tanu(args):

@@ -25,7 +25,7 @@ def get_base_dir() -> Path:
 
 
 def get_asset_path(name: str) -> Path:
-    """Path to a bundled asset (whisper.cpp, piper, …)."""
+    """Path to a bundled asset (moonshine-voice, piper, …)."""
     return Path(__file__).resolve().parent / "assets" / name
 
 
@@ -33,12 +33,15 @@ def get_deskbot_config(cfg: dict) -> dict:
     """Deskbot config with resolved asset paths."""
     assets = Path(__file__).resolve().parent / "assets"
 
+    # Moonshine model arch values (moonshine-c-api.h):
+    #   TINY=0, BASE=1, TINY_STREAMING=2, BASE_STREAMING=3,
+    #   SMALL_STREAMING=4, MEDIUM_STREAMING=5
     defaults = {
-        "whisper_bin":    str(assets / "whisper.cpp" / "build" / "bin" / "main"),
-        "whisper_model":  str(assets / "whisper.cpp" / "models" / "ggml-tiny.en.bin"),
-        "whisper_threads": 4,
-        "piper_bin":      str(assets / "piper" / "piper"),
-        "piper_model":    str(assets / "piper" / "voices" / "en_US-lessac-medium.onnx"),
+        "moonshine_bin":    str(assets / "moonshine-voice" / "bin" / "moonshine_stt"),
+        "moonshine_model":  str(assets / "moonshine-voice" / "tiny-streaming-en"),
+        "moonshine_arch":   2,
+        "piper_bin":        str(assets / "piper" / "piper"),
+        "piper_model":      str(assets / "piper" / "voices" / "en_US-lessac-medium.onnx"),
     }
 
     dc = dict(cfg.get("deskbot", {}))
@@ -53,6 +56,14 @@ PROVIDER_DEFAULTS = {
     "openai":     ("https://api.openai.com/v1",    "gpt-4o"),
     "ollama":     ("http://localhost:11434/v1",    "llama3"),
     "anthropic":  ("https://api.anthropic.com/v1", "claude-3-5-sonnet-latest"),
+    "mistral":    ("https://api.mistral.ai/v1",    "mistral-large-latest"),
+    "groq":       ("https://api.groq.com/openai/v1", "llama-3.3-70b-versatile"),
+    "gemini":     ("https://generativelanguage.googleapis.com/v1beta/openai", "gemini-2.5-flash"),
+    "deepseek":   ("https://api.deepseek.com/v1",  "deepseek-chat"),
+    "xai":        ("https://api.x.ai/v1",          "grok-3"),
+    "together":   ("https://api.together.xyz/v1",  "meta-llama/Llama-3.3-70B-Instruct-Turbo"),
+    "cerebras":   ("https://api.cerebras.ai/v1",   "llama-3.3-70b"),
+    "perplexity": ("https://api.perplexity.ai",    "llama-3.1-sonar-large-128k-online"),
 }
 
 DEFAULT_CONFIG = {
