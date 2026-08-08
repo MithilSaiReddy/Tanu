@@ -34,32 +34,23 @@ def _run_subagent(
     """
     # Lazy import — keeps circular-import risk zero
     from tanu.agent import AgentLoop
-    from tanu.identity import IdentityManager
+    from tanu.config import workspace_path
+    from tanu.identity import load_identity_block
 
     cfg = ctx.cfg
 
-    # ── Build a minimal identity for the sub-agent ──────────────────────────
-    # We give it the same SOUL/USER context as the parent so it shares values
-    # and memory, but override the IDENTITY with the requested role.
-    identity = IdentityManager(cfg)
-
-    soul      = identity.load("SOUL")       # shared ethics / values
-    user_mem  = identity.load("USER")       # shared memory about the user
-    agent_md  = identity.load("AGENT")      # shared tool descriptions
+    # ── Shared context for the sub-agent ─────────────────────────────────────
+    # Same SOUL/USER/AGENT files as the parent so it shares values, memory
+    # and tool descriptions, but runs with its own role-focused system prompt.
+    shared = load_identity_block(workspace_path(cfg))
 
     system_prompt = f"""You are a specialised sub-agent with the following role:
 
 {role}
 
-─── Shared context ───────────────────────────────────────────────
-{soul}
-
-─── Memory about the user ────────────────────────────────────────
-{user_mem}
-
-─── Available tools ──────────────────────────────────────────────
-{agent_md}
-──────────────────────────────────────────────────────────────────
+─── Shared context ───────────────────────────────
+{shared}
+──────────────────────────────────────────────────
 
 Important rules:
 - Focus ONLY on the task given to you.
@@ -71,21 +62,16 @@ Important rules:
     # ── Spin up the child AgentLoop ─────────────────────────────────────────
     child = AgentLoop(
         cfg=cfg,
+        max_iterations=max_iterations,
         system_prompt_override=system_prompt,
-        max_tool_iterations=max_iterations,
     )
 
-    # Collect streamed tokens into a string (no live streaming for sub-agents)
-    tokens: list[str] = []
-
-    result = child.run(
-        message=task,
+    return child.run(
+        task,
         history=[],
-        on_token=lambda t: tokens.append(t),
+        stream=False,
+        auto_continue=False,
     )
-
-    # AgentLoop.run() returns the final text; fall back to joined tokens
-    return result if result else "".join(tokens)
 
 
 # ─────────────────────────────────────────────
@@ -105,7 +91,7 @@ Important rules:
         "  'planner'     — break a goal into ordered subtasks\n"
         "  'writer'      — draft documents, emails, or reports\n"
         "  'analyst'     — read files/data and extract insights\n"
-        "  'memory'      — read and update USER.md with new facts\n"
+        "  'memory'      — manage USER.md / MEMORY.md stores via the memory tool\n"
         "Or pass any free-form role description."
     ),
     parameters={
@@ -170,9 +156,10 @@ def spawn_subagent(
             "with supporting evidence."
         ),
         "memory": (
-            "You are a memory manager. Your only job is to read the current USER.md, "
-            "identify new facts provided in the task, and append them cleanly "
-            "without duplicating existing entries."
+            "You are a memory manager. Your job is to read the current USER.md "
+            "and MEMORY.md stores, identify new facts in the task, and persist "
+            "them with the memory tool (add/replace/remove) without duplicating "
+            "existing entries."
         ),
     }
 

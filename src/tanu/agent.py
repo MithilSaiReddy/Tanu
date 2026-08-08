@@ -1,9 +1,22 @@
 """
-tanu/agent.py  —  v2
+tanu/agent.py  —  v3
 
 AgentLoop, HeartbeatService, CronService.
 
-Key improvements over v1
+v3 — long-running, context-aware agent loop
+──────────────────────────────────────────
+• IterationBudget   : thread-safe consume/refund counter; refund on tool error
+• Context manager   : prune old tool outputs + optional structured summary
+                      when the conversation crosses the configured threshold
+• Provider failover : retry a failing turn on agents.defaults.fallback_providers
+                      (429 / 5xx / connection errors)
+• Parallel tools    : multiple tool_calls execute concurrently, results kept
+                      in original order
+• Cancellation      : cancel_event aborts a turn mid-stream (voice-friendly)
+• Message sanitizer : enforces User → Assistant alternation defensively
+• on_turn_done      : callback fired with (final_text, usage) after each turn
+
+Key improvements over v2
 ────────────────────────
 • Callbacks system  : on_token / on_tool_start / on_tool_done / on_error
   → consumed by CLI (stdout), web UI (SSE), and tests alike
@@ -24,33 +37,59 @@ import sys
 import textwrap
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Callable, Optional
 
+from tanu import context as ctxmod
 from tanu.config import get_active_provider, workspace_path
-from tanu.llm    import LLMProvider
+from tanu.identity import load_identity_block
+from tanu.llm    import LLMError, LLMProvider
 from tanu.tools  import ToolRegistry
+from tanu.tools.memory import MemoryStore
 
 LOGO = "🎙️"
+
+# HTTP statuses that trigger automatic provider failover.
+_FAILOVER_STATUS = {429, 500, 502, 503, 504}
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  ITERATION BUDGET
+# ─────────────────────────────────────────────────────────────────────────────
+
+class IterationBudget:
+    """Thread-safe iteration counter with consume()/refund() semantics."""
+
+    def __init__(self, max_iterations: int):
+        self.max       = max(int(max_iterations), 1)
+        self._used     = 0
+        self._lock     = threading.Lock()
+        self.exhausted = threading.Event()
+
+    def consume(self) -> bool:
+        """Reserve one iteration. Returns False (and sets `exhausted`) when the cap is hit."""
+        with self._lock:
+            if self._used >= self.max:
+                self.exhausted.set()
+                return False
+            self._used += 1
+            return True
+
+    def refund(self, n: int = 1) -> None:
+        """Give back iterations (e.g. a tool call failed and cost nothing useful)."""
+        with self._lock:
+            self._used = max(0, self._used - n)
+            if self._used < self.max:
+                self.exhausted.clear()
+
+    @property
+    def used(self) -> int:
+        with self._lock:
+            return self._used
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  SYSTEM PROMPT
 # ─────────────────────────────────────────────────────────────────────────────
-
-def _read_identity_files(workspace: Path) -> str:
-    """Read SOUL.md, IDENTITY.md, USER.md, AGENT.md in that order."""
-    files   = ["SOUL.md", "IDENTITY.md", "USER.md", "AGENT.md"]
-    parts   = []
-    for fname in files:
-        path = workspace / fname
-        if path.exists():
-            try:
-                content = path.read_text(encoding="utf-8", errors="replace").strip()
-                if content:
-                    parts.append(content)
-            except Exception:
-                pass
-    return "\n\n---\n\n".join(parts)
 
 class SkillsLoader:
     """
@@ -100,9 +139,10 @@ class SkillsLoader:
 
         return self._result
 
-def build_system_prompt(cfg: dict, skills_loader: SkillsLoader) -> str:
+
+def build_system_prompt(cfg: dict, skills_loader: SkillsLoader, memory_store=None) -> str:
     ws       = workspace_path(cfg)
-    identity = _read_identity_files(ws)
+    identity = load_identity_block(ws)
     skills   = skills_loader.get()
 
     sections = [
@@ -135,7 +175,19 @@ def build_system_prompt(cfg: dict, skills_loader: SkillsLoader) -> str:
     ]
 
     if identity:
-        sections.append(f"# Identity & Memory\n\n{identity}")
+        sections.append(f"# Identity\n\n{identity}")
+
+    if memory_store is not None:
+        memory_notes = memory_store.format_for_system_prompt("memory")
+        user_profile = memory_store.format_for_system_prompt("user")
+        if memory_notes or user_profile:
+            block = []
+            if user_profile:
+                block.append(f"## User Profile\n{user_profile}")
+            if memory_notes:
+                block.append(f"## Persistent Memory (agent notes)\n{memory_notes}")
+            sections.append("# Memory\n\n" + "\n\n".join(block))
+
     if skills:
         sections.append(f"# Active Skills\n\n{skills}")
 
@@ -171,11 +223,20 @@ class AgentLoop:
         cfg:             dict,
         send_message_fn: Optional[Callable[[str], None]] = None,
         callbacks:       Optional[dict]                  = None,
+        max_iterations:  Optional[int]                   = None,
+        system_prompt_override: Optional[str]            = None,
     ):
-        self.cfg      = cfg
-        self.callbacks = callbacks or {}
-        defaults      = cfg["agents"]["defaults"]
-        self.max_iter = defaults.get("max_tool_iterations", 20)
+        self.cfg        = cfg
+        self.callbacks  = callbacks or {}
+        defaults        = cfg["agents"]["defaults"]
+
+        # Per-agent iteration budget (subagents may override the default cap).
+        cap = max_iterations if max_iterations is not None else defaults.get("max_tool_iterations", 20)
+        self.max_iter = cap
+
+        # Sub-agents can inject a role-focused system prompt instead of the
+        # default identity + skills prompt.
+        self._system_prompt_override = system_prompt_override
 
         pname, api_key, api_base, model = get_active_provider(cfg)
         if not pname:
@@ -185,6 +246,7 @@ class AgentLoop:
                 "Or open the web UI: python main.py serve"
             )
 
+        self._provider_name = pname
         self.llm = LLMProvider(
             name        = pname,
             api_key     = api_key,
@@ -192,7 +254,45 @@ class AgentLoop:
             model       = model,
             max_tokens  = defaults.get("max_tokens", 8192),
             temperature = defaults.get("temperature", 0.7),
+            max_retries = defaults.get("llm_retries", 5),
         )
+
+        # Fallback chain — retried mid-turn on 429 / 5xx / connection errors.
+        self._fallback_chain: list[LLMProvider] = []
+        for fname in defaults.get("fallback_providers", []):
+            fcfg = cfg.get("providers", {}).get(fname)
+            if not fcfg:
+                print(f"[WARN] Fallback provider '{fname}' not configured — skipping", file=sys.stderr)
+                continue
+            self._fallback_chain.append(LLMProvider(
+                name        = fname,
+                api_key     = fcfg.get("api_key", ""),
+                api_base    = fcfg.get("api_base", ""),
+                model       = fcfg.get("model") or defaults.get("model", ""),
+                max_tokens  = defaults.get("max_tokens", 8192),
+                temperature = defaults.get("temperature", 0.7),
+                max_retries = defaults.get("llm_retries", 5),
+            ))
+
+        # Context management — prune old verbose tool outputs and, when
+        # configured, summarize the middle of the conversation window.
+        self._ctx            = defaults.get("context", {})
+        self._compressing    = False
+        self._previous_summary: Optional[str] = None
+        self._compaction_note_added = False
+        self._summarize_fn   = self._summary_call
+
+        # Persistent memory — bounded MEMORY.md / USER.md stores with a frozen
+        # system-prompt snapshot (stable prefix across turns). Writes during a
+        # turn update disk immediately but not the snapshot.
+        mem_cfg = defaults.get("memory", {})
+        self.memory = MemoryStore(
+            workspace          = workspace_path(cfg),
+            memory_char_limit  = mem_cfg.get("memory_char_limit", 2200),
+            user_char_limit    = mem_cfg.get("user_char_limit", 1375),
+            scan_enabled       = mem_cfg.get("scan_enabled", True),
+        )
+        self.memory.load_from_disk()
 
         # Tool registry with tool-level callbacks wired in
         self.tools = ToolRegistry(
@@ -209,7 +309,8 @@ class AgentLoop:
 
         print(
             f"[INFO] Agent ready — provider={pname}, model={model}, "
-            f"tools={len(self.tools.schema())}",
+            f"tools={len(self.tools.schema())}, "
+            f"max_iter={self.max_iter}, fallbacks={len(self._fallback_chain)}",
             file=sys.stderr,
         )
 
@@ -219,22 +320,30 @@ class AgentLoop:
         history:      Optional[list] = None,
         stream:       bool           = True,
         auto_continue: bool          = True,
-    ) -> str:
+        cancel_event: Optional[threading.Event] = None,
+    ) -> Optional[str]:
         """
         Execute one conversational turn.
         When auto_continue=True, after the agent finishes its response the
         loop checks for pending todo items and automatically continues
         working through them — no user prompt needed between tasks.
-        Returns the final concatenated text.
+        When cancel_event is set, the turn aborts and None is returned
+        (callers already guard with `if result:`).
+        Returns the final concatenated text, or None if cancelled.
         """
-        system_prompt = build_system_prompt(self.cfg, self._skills_loader)
+        system_prompt = (
+            self._system_prompt_override
+            or build_system_prompt(self.cfg, self._skills_loader, memory_store=self.memory)
+        )
         tools_schema  = self.tools.schema()
 
         # Internal message window — copies caller history so auto-continue
         # turns don't pollute the external session history.
-        internal_hist = list(history) if history else []
+        internal_hist = self._sanitize_message_list(history or [])
         current_msg   = user_message
         parts: list[str] = []
+
+        budget = IterationBudget(self.max_iter)
 
         while True:
             messages = [{"role": "system", "content": system_prompt}]
@@ -244,22 +353,31 @@ class AgentLoop:
             first_call = True
             final      = ""
 
-            for iteration in range(self.max_iter):
+            while budget.consume():
+                if cancel_event is not None and cancel_event.is_set():
+                    return None
+
+                if self._ctx.get("enabled", True):
+                    messages = self._maybe_compress(messages)
+
                 use_stream = stream and first_call
                 first_call = False
 
                 try:
-                    resp = self.llm.chat(
-                        messages,
-                        tools    = tools_schema,
-                        stream   = use_stream,
-                        token_cb = self.callbacks.get("on_token") if use_stream else None,
-                    )
+                    resp = self._call_llm(messages, tools_schema, use_stream, cancel_event)
+                except LLMError as e:
+                    err = f"LLM call failed: {e}"
+                    if self.callbacks.get("on_error"):
+                        self.callbacks["on_error"](err)
+                    return f"[ERROR] {err}"
                 except Exception as e:
                     err = f"LLM call failed: {type(e).__name__}: {e}"
                     if self.callbacks.get("on_error"):
                         self.callbacks["on_error"](err)
                     return f"[ERROR] {err}"
+
+                if resp is None or resp.get("cancelled"):
+                    return None
 
                 choice     = resp["choices"][0]
                 msg        = choice["message"]
@@ -270,25 +388,26 @@ class AgentLoop:
                     final = (msg.get("content") or "").strip()
                     break
 
-                for tc in tool_calls:
-                    fn   = tc.get("function", {})
-                    name = fn.get("name", "")
-                    try:
-                        args = json.loads(fn.get("arguments", "{}"))
-                    except json.JSONDecodeError:
-                        args = {}
+                results = self._execute_tool_calls(tool_calls, cancel_event)
+                if results is None:
+                    return None
 
-                    result = self.tools.call(name, args)
-
+                for tc, result in zip(tool_calls, results):
                     messages.append({
                         "role":         "tool",
                         "tool_call_id": tc.get("id", "t0"),
                         "content":      result,
                     })
+                    if result.startswith("[TOOL ERROR"):
+                        budget.refund()
             else:
                 return "[Max tool iterations reached — task may be incomplete]"
 
             parts.append(final)
+
+            if self.callbacks.get("on_turn_done"):
+                usage = resp.get("usage") if isinstance(resp, dict) else None
+                self.callbacks["on_turn_done"](final, usage)
 
             if not auto_continue:
                 break
@@ -305,6 +424,175 @@ class AgentLoop:
             break
 
         return "\n\n".join(parts) if len(parts) > 1 else (parts[0] if parts else "")
+
+    # ── Loop helpers ─────────────────────────────────────────────────────────
+
+    def _call_llm(
+        self,
+        messages:     list,
+        tools_schema: list,
+        use_stream:   bool,
+        cancel_event: Optional[threading.Event],
+    ) -> dict:
+        """
+        Make an LLM call, transparently failing over to the fallback chain
+        on retryable errors. Raises LLMError if every provider fails.
+        """
+        providers = [self.llm] + self._fallback_chain
+        last_exc  = None
+
+        for llm in providers:
+            try:
+                return llm.chat(
+                    messages,
+                    tools      = tools_schema,
+                    stream     = use_stream,
+                    token_cb   = self.callbacks.get("on_token") if use_stream else None,
+                    cancel_event = cancel_event,
+                )
+            except LLMError as e:
+                last_exc = e
+                if e.status not in _FAILOVER_STATUS:
+                    raise  # auth / model / other — not worth failover
+                if llm is not self.llm:
+                    print(f"[WARN] Fallback provider '{llm.name}' also failed: {e}", file=sys.stderr)
+                elif self._fallback_chain:
+                    print(
+                        f"[WARN] Provider '{self._provider_name}' failed ({e.status}) — "
+                        f"trying fallback(s): {[p.name for p in self._fallback_chain]}",
+                        file=sys.stderr,
+                    )
+                if self.callbacks.get("on_error"):
+                    self.callbacks["on_error"](str(e))
+
+        raise last_exc or LLMError(0, "All providers failed.")
+
+    def _maybe_compress(self, messages: list) -> list:
+        """
+        Preflight window compression:
+          1. prune verbose old tool outputs (free)
+          2. if still over threshold and summarization is enabled,
+             summarize the middle turns and splice in a compact summary
+        """
+        max_chars   = self._ctx.get("max_chars", 32000)
+        threshold   = self._ctx.get("threshold", 0.5)
+        trigger     = max_chars * threshold
+
+        if ctxmod.estimate_chars(messages) < trigger:
+            return messages
+        if self._compressing:  # recursion guard
+            return messages
+
+        self._compressing = True
+        try:
+            messages = ctxmod.prune_old_tool_outputs(
+                messages,
+                protect_last_n = self._ctx.get("protect_last_n", 8),
+                min_len        = 200,
+            )
+
+            if self._ctx.get("summarize", False) and ctxmod.estimate_chars(messages) >= trigger:
+                boundary = ctxmod.pick_boundary(
+                    messages,
+                    trigger,
+                    protect_last_n = self._ctx.get("protect_last_n", 8),
+                )
+                middle = messages[:boundary]
+                tail   = messages[boundary:]
+
+                summary = ctxmod.summarize_middle(
+                    middle,
+                    self._summarize_fn,
+                    previous_summary = self._previous_summary,
+                    max_summary_chars = self._ctx.get("max_summary_chars", 4000),
+                )
+                if summary:
+                    self._previous_summary = summary
+                    if not self._compaction_note_added:
+                        note = (
+                            "\n\n[Note: some earlier conversation turns have been "
+                            "compacted. A structured summary is included below.]"
+                        )
+                        messages[0] = {
+                            **messages[0],
+                            "content": messages[0].get("content", "") + note,
+                        }
+                        self._compaction_note_added = True
+
+                    summary_msg = {
+                        "role": "user",
+                        "content": (
+                            "[CONTEXT COMPACTION] Earlier turns were compacted "
+                            f"into this summary:\n\n{summary}"
+                        ),
+                    }
+                    messages = messages[:1] + [summary_msg] + tail
+                    messages = ctxmod.sanitize_tool_pairs(messages)
+
+                    print(f"[INFO] Context compacted — {len(middle)} turns summarized", file=sys.stderr)
+            return messages
+        except Exception as e:
+            print(f"[WARN] Context compression failed: {e}", file=sys.stderr)
+            return messages
+        finally:
+            self._compressing = False
+
+    def _summary_call(self, prompt_messages: list) -> Optional[str]:
+        """Run the summarizer against the current LLM (no tools, not streamed)."""
+        resp = self.llm.chat(prompt_messages, tools=None, stream=False)
+        return (resp["choices"][0]["message"].get("content") or "").strip() or None
+
+    def _execute_tool_calls(
+        self,
+        tool_calls:  list,
+        cancel_event: Optional[threading.Event],
+    ) -> Optional[list]:
+        """
+        Dispatch tool calls. Single call → direct; multiple calls → concurrent,
+        results returned in the original order. Returns None if cancelled.
+        """
+        parsed: list[tuple[dict, str, dict]] = []
+        for tc in tool_calls:
+            fn = tc.get("function", {})
+            name = fn.get("name", "")
+            try:
+                args = json.loads(fn.get("arguments", "{}"))
+            except json.JSONDecodeError:
+                args = {}
+            parsed.append((tc, name, args))
+
+        if not parsed:
+            return []
+        if cancel_event is not None and cancel_event.is_set():
+            return None
+        if len(parsed) == 1:
+            _, name, args = parsed[0]
+            return [self.tools.call(name, args)]
+
+        with ThreadPoolExecutor(max_workers=len(parsed)) as ex:
+            futures = [ex.submit(self.tools.call, name, args) for _, name, args in parsed]
+            return [f.result() for f in futures]
+
+    @staticmethod
+    def _sanitize_message_list(messages: list) -> list:
+        """
+        Defensive role-alternation sanitizer. Drops empty assistant turns and
+        collapses consecutive same-role messages (system/user/assistant).
+        """
+        out: list = []
+        for m in messages:
+            role = m.get("role")
+            if role not in ("system", "user", "assistant", "tool"):
+                continue
+            if role == "assistant":
+                content = m.get("content")
+                if (content is None or not str(content).strip()) and not m.get("tool_calls"):
+                    continue
+            prev = out[-1] if out else None
+            if prev is not None and prev.get("role") == role and role != "tool":
+                continue
+            out.append(dict(m))
+        return out
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  HEARTBEAT SERVICE

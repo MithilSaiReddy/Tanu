@@ -383,6 +383,13 @@ class ToolRegistry:
         self._pkg_path = Path(__file__).parent
         self._pkg_name = __name__.rsplit(".", 1)[0]   # "tanu.tools"
 
+        # Tool filtering — `enabled_tools` is an allowlist (empty = all),
+        # `disabled_tools` a blocklist. Hidden tools are omitted from the
+        # schema sent to the model (saves tokens) but stay registered, so a
+        # stale request gets a clear "disabled" message instead of "unknown".
+        self._enabled:  set[str] = set(cfg["agents"]["defaults"].get("enabled_tools", []))
+        self._disabled: set[str] = set(cfg["agents"]["defaults"].get("disabled_tools", []))
+
         # Parse extra tool paths from config (outside the tanu package)
         self._extra_paths: list[tuple[Path, str]] = []
         for entry in cfg.get("tool_paths", []):
@@ -392,14 +399,25 @@ class ToolRegistry:
             self._extra_paths.append((path, entry["package"]))
 
         self._refresh()
-        tool_names = list(_REGISTRY)
+        active = self._active_names()
         extras = f" + {len(self._extra_paths)} extra path(s)" if self._extra_paths else ""
-        print(f"[INFO] Tools loaded ({len(tool_names)}{extras}): {', '.join(tool_names)}", file=sys.stderr)
+        hidden = len(_REGISTRY) - len(active)
+        hidden_s = f", {hidden} disabled" if hidden else ""
+        print(f"[INFO] Tools loaded ({len(active)}{extras}{hidden_s}): {', '.join(sorted(active))}", file=sys.stderr)
+
+    def _active_names(self) -> set[str]:
+        """Names of tools the model is allowed to see and call."""
+        names = set(_REGISTRY)
+        if self._enabled:
+            names &= self._enabled
+        names -= self._disabled
+        return names
 
     def schema(self) -> list[dict]:
         """Return OpenAI tool-call schema list. Triggers hot-reload check."""
         self._refresh()
-        return [schema for _, schema in _REGISTRY.values()]
+        active = self._active_names()
+        return [schema for name, (_, schema) in _REGISTRY.items() if name in active]
 
     def call(self, name: str, args: dict) -> str:
         """
@@ -409,10 +427,16 @@ class ToolRegistry:
         self._refresh()
 
         if name not in _REGISTRY:
-            available = ", ".join(_REGISTRY) or "(none)"
+            available = ", ".join(sorted(_REGISTRY)) or "(none)"
             return (
                 f"[TOOL ERROR] Unknown tool: '{name}'.\n"
                 f"Available tools: {available}"
+            )
+
+        if name not in self._active_names():
+            return (
+                f"[TOOL ERROR] Tool '{name}' is disabled in config "
+                f"(agents.defaults.enabled_tools / disabled_tools)."
             )
 
         fn, _  = _REGISTRY[name]

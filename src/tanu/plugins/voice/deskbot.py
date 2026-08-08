@@ -426,7 +426,12 @@ class DeskbotConnection:
             history = self.mgr.history("tanu")
 
             try:
-                result = agent.run(text, history=history, stream=True)
+                result = agent.run(
+                    text,
+                    history=history,
+                    stream=True,
+                    cancel_event=self._agent_cancel,
+                )
             except Exception as e:
                 LOG.error(f"[Agent] Error: {e}")
                 result = f"Sorry, I encountered an error."

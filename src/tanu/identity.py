@@ -1,12 +1,16 @@
 """
 tanu/identity.py
-Identity layer — loads the four core Markdown files that define who tanu is
+Identity layer — loads the core Markdown files that define who tanu is
 and who it's talking to. Files live in workspace/ and are loaded in priority order:
 
     SOUL.md      Values, principles, refusals. The ethical core. You write this.
     IDENTITY.md  Name, personality, tone, quirks. You write this.
     USER.md      Who the user is — projects, prefs, context. Agent updates this.
     AGENT.md     What tools/skills are active. Agent can update this.
+    MEMORY.md    Agent's own notes — environment facts, conventions, lessons.
+
+USER.md and MEMORY.md are managed through the bounded `memory` tool
+(tools/memory.py) and injected via a frozen snapshot — see MemoryStore.
 
 Philosophy: plain Markdown, human-readable, editable in any text editor.
 No JSON schemas. No embeddings. Just files.
@@ -22,6 +26,7 @@ SOUL_FILE     = "SOUL.md"
 IDENTITY_FILE = "IDENTITY.md"
 USER_FILE     = "USER.md"
 AGENT_FILE    = "AGENT.md"
+MEMORY_FILE   = "MEMORY.md"
 
 # ── Default content ───────────────────────────────────────────────────────────
 # Written on first run if the file doesn't exist.
@@ -69,11 +74,21 @@ _DEFAULT_AGENT = """\
 _This file is updated automatically when skills or tools change._
 """
 
+_DEFAULT_MEMORY = """\
+# Agent Memory
+
+_This file is updated by Tanu as it learns about its environment._
+_It holds the agent's own notes — separate from the user profile._
+
+No notes stored yet.
+"""
+
 _DEFAULTS = {
     SOUL_FILE:     _DEFAULT_SOUL,
     IDENTITY_FILE: _DEFAULT_IDENTITY,
     USER_FILE:     _DEFAULT_USER,
     AGENT_FILE:    _DEFAULT_AGENT,
+    MEMORY_FILE:   _DEFAULT_MEMORY,
 }
 
 
@@ -93,14 +108,18 @@ def ensure_identity_files(workspace: Path) -> None:
 
 def load_identity_block(workspace: Path) -> str:
     """
-    Read all four identity files and return a single string to inject
-    at the top of the system prompt (before skills).
+    Read the identity files (SOUL/IDENTITY/AGENT) and return a single string
+    to inject at the top of the system prompt (before skills).
+
+    USER.md and MEMORY.md are deliberately excluded — they are injected as a
+    frozen snapshot by the agent's MemoryStore (see tools/memory.py), so they
+    don't appear twice and so the snapshot stays byte-stable across turns.
 
     Missing files are silently skipped (ensure_identity_files should
     have been called first, but this is defensive).
     """
     sections = []
-    for filename in [SOUL_FILE, IDENTITY_FILE, USER_FILE, AGENT_FILE]:
+    for filename in [SOUL_FILE, IDENTITY_FILE, AGENT_FILE]:
         path = workspace / filename
         if path.exists():
             try:
