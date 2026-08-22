@@ -2,6 +2,11 @@
 
 **Desktop AI assistant** — a lightweight, always-on companion with a self-contained Python agent framework (server, tools, voice — all under `src/tanu/`) and a [Godot 4](https://godotengine.org) animated character UI.
 
+Local-first runtime: speech, memory, skills, tools, and UI stay on-device. A
+bounded local event bus coordinates components, with a default 600 MB soft /
+800 MB hard process-tree memory budget. Only the configured LLM and explicitly
+enabled online integrations use the network.
+
 [![Docs](https://img.shields.io/badge/docs-mkdocs-blue)](https://mithilsaireddy.github.io/Tanu/)
 
 ---

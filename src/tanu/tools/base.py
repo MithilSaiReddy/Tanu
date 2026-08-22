@@ -17,7 +17,10 @@ import pkgutil
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
+
+if TYPE_CHECKING:
+    from tanu.runtime import LocalEventBus, MemoryBudget
 
 _MISSING = object()  # sentinel for param() default detection
 
@@ -92,6 +95,13 @@ class ToolContext:
     send_message_fn: Optional[Callable[[str], None]]       = None
     on_tool_start:   Optional[Callable[[str, dict], None]] = None
     on_tool_done:    Optional[Callable[[str, str],  None]] = None
+    event_bus:       Optional["LocalEventBus"]             = None
+    memory_budget:   Optional["MemoryBudget"]              = None
+
+    def publish(self, topic: str, payload: Optional[dict] = None) -> None:
+        """Publish a bounded local event for another component or skill."""
+        if self.event_bus:
+            self.event_bus.publish(topic, payload or {}, source="tool")
 
     # ── credential helper ─────────────────────────────────────────────────
 
@@ -367,6 +377,8 @@ class ToolRegistry:
         send_message_fn: Optional[Callable[[str], None]] = None,
         workspace:       Optional[Path]                  = None,
         callbacks:       Optional[dict]                  = None,
+        event_bus:       Optional["LocalEventBus"]      = None,
+        memory_budget:   Optional["MemoryBudget"]       = None,
     ):
         from tanu.config import workspace_path
 
@@ -379,6 +391,8 @@ class ToolRegistry:
             "max_tool_output_chars", self.DEFAULT_MAX_OUTPUT
         )
         self.callbacks = callbacks or {}
+        self.event_bus = event_bus
+        self.memory_budget = memory_budget
 
         self._pkg_path = Path(__file__).parent
         self._pkg_name = __name__.rsplit(".", 1)[0]   # "tanu.tools"
@@ -411,6 +425,18 @@ class ToolRegistry:
         if self._enabled:
             names &= self._enabled
         names -= self._disabled
+        runtime_cfg = self.cfg.get("runtime", {})
+        if runtime_cfg.get("local_only", True):
+            names -= {
+                "gmail_authenticate",
+                "gmail_get_email",
+                "gmail_list_inbox",
+                "gmail_search",
+                "gmail_send",
+                "web_search",
+            }
+        if not runtime_cfg.get("allow_subagents", False):
+            names -= {"spawn_subagent", "agent_pipeline"}
         return names
 
     def schema(self) -> list[dict]:
@@ -441,6 +467,12 @@ class ToolRegistry:
 
         fn, _  = _REGISTRY[name]
         ctx    = self._make_ctx()
+
+        if self.memory_budget and self.memory_budget.pressure() == "hard":
+            return "[TOOL ERROR] Memory hard limit reached; tool execution was refused."
+
+        if self.event_bus:
+            self.event_bus.publish("tool.started", {"name": name}, source="tool-registry")
 
         if ctx.on_tool_start:
             ctx.on_tool_start(name, args)
@@ -479,6 +511,13 @@ class ToolRegistry:
         if ctx.on_tool_done:
             ctx.on_tool_done(name, output)
 
+        if self.event_bus:
+            self.event_bus.publish(
+                "tool.completed",
+                {"name": name, "ok": not output.startswith("[TOOL ERROR")},
+                source="tool-registry",
+            )
+
         return output
 
     def _refresh(self) -> None:
@@ -494,4 +533,6 @@ class ToolRegistry:
             send_message_fn = self.send_message_fn,
             on_tool_start   = self.callbacks.get("on_tool_start"),
             on_tool_done    = self.callbacks.get("on_tool_done"),
+            event_bus       = self.event_bus,
+            memory_budget   = self.memory_budget,
         )

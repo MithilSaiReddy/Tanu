@@ -64,7 +64,8 @@ def cmd_tanu(args):
         from tanu.plugins.voice.display import init_display
         display = init_display(cfg)
     except Exception:
-        pass
+        from tanu.plugins.voice.display import NullDisplay
+        display = NullDisplay()
 
     conn = DeskbotConnection(cfg, mgr, display, simulate=simulate)
 
@@ -90,10 +91,11 @@ def cmd_tanu(args):
         t.start()
 
     try:
-        while True:
-            time.sleep(1)
+        while not conn.stopped_event.wait(1):
+            pass
     except KeyboardInterrupt:
         print("\n🎙️ Shutting down...")
+        conn.stop()
         if reminder_worker:
             reminder_worker.stop()
 
@@ -173,7 +175,10 @@ def cmd_update(args):
 
 
 def cmd_desk(args):
+    from tanu.runtime import MemoryBudget, MemoryWatchdog
+
     ROOT = Path(__file__).parent
+    cfg = load_config()
 
     GODOT_BINS = [
         ROOT / "build" / "tanu-godot",
@@ -239,11 +244,19 @@ def cmd_desk(args):
         return
 
     cleanup_done = threading.Event()
+    memory_cfg = cfg.get("runtime", {}).get("memory", {})
+    memory_budget = MemoryBudget(
+        soft_limit_mb=memory_cfg.get("soft_limit_mb", 600),
+        hard_limit_mb=memory_cfg.get("hard_limit_mb", 800),
+    )
+    watchdog = None
 
     def cleanup(sig=None, frame=None):
         if cleanup_done.is_set():
             return
         cleanup_done.set()
+        if watchdog:
+            watchdog.stop()
         print("\nShutting down...")
         if ui_proc.poll() is None:
             ui_proc.terminate()
@@ -265,6 +278,26 @@ def cmd_desk(args):
     signal.signal(signal.SIGTERM, cleanup)
     import atexit
     atexit.register(cleanup)
+
+    def on_memory_pressure(level: str, current_mb: float) -> None:
+        if level == "soft":
+            print(
+                f"\nMemory pressure: {current_mb:.0f} MB used "
+                f"(soft limit {memory_budget.soft_limit_mb} MB)."
+            )
+        elif level == "hard":
+            print(
+                f"\nMemory hard limit reached: {current_mb:.0f} MB / "
+                f"{memory_budget.hard_limit_mb} MB. Stopping Tanu safely."
+            )
+            cleanup()
+
+    watchdog = MemoryWatchdog(
+        memory_budget,
+        on_pressure=on_memory_pressure,
+        interval_seconds=memory_cfg.get("watchdog_interval_seconds", 2.0),
+    )
+    watchdog.start()
 
     try:
         ui_proc.wait()

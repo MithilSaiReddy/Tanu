@@ -45,6 +45,7 @@ from tanu import context as ctxmod
 from tanu.config import get_active_provider, workspace_path
 from tanu.identity import load_identity_block
 from tanu.llm    import LLMError, LLMProvider
+from tanu.runtime import LocalEventBus, MemoryBudget, runtime_from_config
 from tanu.tools  import ToolRegistry
 from tanu.tools.memory import MemoryStore
 
@@ -97,8 +98,22 @@ class SkillsLoader:
     Calling .get() returns fresh content if any file changed, otherwise cached.
     """
 
-    def __init__(self, workspace: Path):
+    def __init__(
+        self,
+        workspace: Path,
+        event_bus: Optional[LocalEventBus] = None,
+        max_skills: int = 32,
+        max_skill_chars: int = 4000,
+        max_total_chars: int = 12000,
+    ):
         self._skills_dir = workspace / "skills"
+        self._event_bus = event_bus
+        self._max_skills = max(1, min(int(max_skills), 64))
+        self._max_skill_chars = max(512, min(int(max_skill_chars), 16_000))
+        self._max_total_chars = max(
+            self._max_skill_chars,
+            min(int(max_total_chars), 64_000),
+        )
         self._cache:   dict[str, str]   = {}   # path → content
         self._mtimes:  dict[str, float] = {}   # path → mtime
         self._result:  str = ""
@@ -110,13 +125,20 @@ class SkillsLoader:
         changed = False
         current_paths: set[str] = set()
 
-        for skill_file in sorted(self._skills_dir.glob("*/SKILL.md")):
+        skill_files = []
+        for skill_file in self._skills_dir.glob("*/SKILL.md"):
+            skill_files.append(skill_file)
+            if len(skill_files) >= self._max_skills:
+                break
+
+        for skill_file in sorted(skill_files):
             key   = str(skill_file)
             mtime = skill_file.stat().st_mtime
             current_paths.add(key)
             if self._mtimes.get(key) != mtime:
                 try:
-                    self._cache[key] = skill_file.read_text(encoding="utf-8", errors="replace")
+                    with skill_file.open(encoding="utf-8", errors="replace") as handle:
+                        self._cache[key] = handle.read(self._max_skill_chars)
                     self._mtimes[key] = mtime
                     changed = True
                     print(f"[INFO] Skill loaded: {skill_file.parent.name}", file=sys.stderr)
@@ -135,7 +157,13 @@ class SkillsLoader:
             for key in sorted(self._cache):
                 name = Path(key).parent.name
                 parts.append(f"### Skill: {name}\n{self._cache[key]}")
-            self._result = "\n\n".join(parts)
+            self._result = "\n\n".join(parts)[:self._max_total_chars]
+            if changed and self._event_bus:
+                self._event_bus.publish(
+                    "skills.changed",
+                    {"count": len(self._cache)},
+                    source="skills-loader",
+                )
 
         return self._result
 
@@ -151,16 +179,19 @@ def build_system_prompt(cfg: dict, skills_loader: SkillsLoader, memory_store=Non
             Your workspace is: {ws}
 
             You are helpful, concise, and efficient.  You have tools for:
-            • Web search (Brave API)         • File read / write / append / list / delete
+            • Optional online web search     • File read / write / append / list / delete
             • Shell command execution         • Current date and time
             • User memory (USER.md)           • Sending messages to the user
             • Todo list (todo.md)             • Task breakdown and tracking
-            • Gmail: read inbox, search, send, get emails
+            • Optional Gmail tools when online integrations are enabled
+            • Local skill events: publish_event / read_events
 
             Always use tools when they'd improve your answer.
             After tool results, synthesise them into a clear, concise reply.
             If a tool returns [TOOL ERROR …], explain the issue and try an alternative.
             Prefer action over lengthy explanation.  Complete the task, then summarise.
+            Use local events for small hand-offs between skills. Keep durable facts in
+            memory or task storage; do not place large documents in event payloads.
 
             ## Task Mode
             When a user request has multiple steps (e.g., "set up my dev environment",
@@ -225,6 +256,8 @@ class AgentLoop:
         callbacks:       Optional[dict]                  = None,
         max_iterations:  Optional[int]                   = None,
         system_prompt_override: Optional[str]            = None,
+        event_bus:       Optional[LocalEventBus]          = None,
+        memory_budget:   Optional[MemoryBudget]           = None,
     ):
         self.cfg        = cfg
         self.callbacks  = callbacks or {}
@@ -233,6 +266,15 @@ class AgentLoop:
         # Per-agent iteration budget (subagents may override the default cap).
         cap = max_iterations if max_iterations is not None else defaults.get("max_tool_iterations", 20)
         self.max_iter = cap
+        if event_bus is None or memory_budget is None:
+            default_bus, default_budget = runtime_from_config(cfg)
+            event_bus = event_bus or default_bus
+            memory_budget = memory_budget or default_budget
+        self.event_bus = event_bus
+        self.memory_budget = memory_budget
+        self.max_parallel_tools = max(
+            1, min(int(cfg.get("runtime", {}).get("max_parallel_tools", 3)), 8)
+        )
 
         # Sub-agents can inject a role-focused system prompt instead of the
         # default identity + skills prompt.
@@ -243,7 +285,7 @@ class AgentLoop:
             raise RuntimeError(
                 "No LLM provider configured.\n"
                 "Run: python main.py onboard\n"
-                "Or open the web UI: python main.py serve"
+                "Or start the local API: python main.py serve"
             )
 
         self._provider_name = pname
@@ -255,6 +297,8 @@ class AgentLoop:
             max_tokens  = defaults.get("max_tokens", 8192),
             temperature = defaults.get("temperature", 0.7),
             max_retries = defaults.get("llm_retries", 5),
+            connect_timeout = defaults.get("llm_connect_timeout_seconds", 8),
+            read_timeout = defaults.get("llm_read_timeout_seconds", 60),
         )
 
         # Fallback chain — retried mid-turn on 429 / 5xx / connection errors.
@@ -272,6 +316,8 @@ class AgentLoop:
                 max_tokens  = defaults.get("max_tokens", 8192),
                 temperature = defaults.get("temperature", 0.7),
                 max_retries = defaults.get("llm_retries", 5),
+                connect_timeout = defaults.get("llm_connect_timeout_seconds", 8),
+                read_timeout = defaults.get("llm_read_timeout_seconds", 60),
             ))
 
         # Context management — prune old verbose tool outputs and, when
@@ -302,10 +348,19 @@ class AgentLoop:
                 "on_tool_start": self.callbacks.get("on_tool_start"),
                 "on_tool_done":  self.callbacks.get("on_tool_done"),
             },
+            event_bus       = self.event_bus,
+            memory_budget   = self.memory_budget,
         )
 
         # Skills loader — hot-reloads on every .run() call
-        self._skills_loader = SkillsLoader(workspace_path(cfg))
+        runtime_cfg = cfg.get("runtime", {})
+        self._skills_loader = SkillsLoader(
+            workspace_path(cfg),
+            event_bus=self.event_bus,
+            max_skills=runtime_cfg.get("max_skills", 32),
+            max_skill_chars=runtime_cfg.get("max_skill_chars", 4000),
+            max_total_chars=runtime_cfg.get("max_active_skill_chars", 12000),
+        )
 
         print(
             f"[INFO] Agent ready — provider={pname}, model={model}, "
@@ -331,6 +386,12 @@ class AgentLoop:
         (callers already guard with `if result:`).
         Returns the final concatenated text, or None if cancelled.
         """
+        if self.memory_budget.pressure() == "hard":
+            self.event_bus.publish("memory.hard_limit", {}, source="agent")
+            return "[ERROR] Memory hard limit reached; start a new turn after memory is released."
+
+        self.event_bus.publish("turn.started", {"message_chars": len(user_message)}, source="agent")
+
         system_prompt = (
             self._system_prompt_override
             or build_system_prompt(self.cfg, self._skills_loader, memory_store=self.memory)
@@ -350,7 +411,6 @@ class AgentLoop:
             messages.extend(internal_hist)
             messages.append({"role": "user", "content": current_msg})
 
-            first_call = True
             final      = ""
 
             while budget.consume():
@@ -360,8 +420,7 @@ class AgentLoop:
                 if self._ctx.get("enabled", True):
                     messages = self._maybe_compress(messages)
 
-                use_stream = stream and first_call
-                first_call = False
+                use_stream = stream
 
                 try:
                     resp = self._call_llm(messages, tools_schema, use_stream, cancel_event)
@@ -423,7 +482,9 @@ class AgentLoop:
 
             break
 
-        return "\n\n".join(parts) if len(parts) > 1 else (parts[0] if parts else "")
+        result = "\n\n".join(parts) if len(parts) > 1 else (parts[0] if parts else "")
+        self.event_bus.publish("turn.completed", {"response_chars": len(result)}, source="agent")
+        return result
 
     # ── Loop helpers ─────────────────────────────────────────────────────────
 
@@ -569,7 +630,7 @@ class AgentLoop:
             _, name, args = parsed[0]
             return [self.tools.call(name, args)]
 
-        with ThreadPoolExecutor(max_workers=len(parsed)) as ex:
+        with ThreadPoolExecutor(max_workers=min(len(parsed), self.max_parallel_tools)) as ex:
             futures = [ex.submit(self.tools.call, name, args) for _, name, args in parsed]
             return [f.result() for f in futures]
 

@@ -62,8 +62,13 @@ Important rules:
     # ── Spin up the child AgentLoop ─────────────────────────────────────────
     child = AgentLoop(
         cfg=cfg,
-        max_iterations=max_iterations,
+        max_iterations=min(
+            max_iterations,
+            int(cfg.get("agents", {}).get("defaults", {}).get("subagent_max_iterations", 8)),
+        ),
         system_prompt_override=system_prompt,
+        event_bus=ctx.event_bus,
+        memory_budget=ctx.memory_budget,
     )
 
     return child.run(
@@ -128,6 +133,9 @@ def spawn_subagent(
     max_iterations: int = 10,
     _ctx: ToolContext = None,
 ) -> str:
+    if _ctx and _ctx.memory_budget and _ctx.memory_budget.pressure() != "normal":
+        return "[TOOL ERROR] Sub-agent skipped while Tanu is under memory pressure."
+
     # ── Expand role shortcuts into full personas ─────────────────────────────
     ROLE_PRESETS = {
         "researcher": (

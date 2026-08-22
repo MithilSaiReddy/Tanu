@@ -19,6 +19,7 @@ GET  /api/memory               → USER.md
 POST /api/memory               → save USER.md
 GET  /api/skills               → list skills
 GET  /api/tools                → active tools
+GET  /api/events               → recent local runtime/skill events
 POST /api/chat                 → SSE streaming chat (backward compat)
 POST /api/clear                → clear session history
 GET  /ws/chat                  → WebSocket chat (new)
@@ -26,7 +27,9 @@ GET  /ws/chat                  → WebSocket chat (new)
 
 import asyncio
 import json
+import os
 import queue
+import signal
 import sys
 import threading
 import traceback
@@ -40,6 +43,7 @@ from tanu.config import (
     CONFIG_FILE, PROVIDER_DEFAULTS, get_active_provider,
     load_config, save_config, workspace_path,
 )
+from tanu.runtime import MemoryWatchdog
 from tanu.security import mask_secrets, origin_is_local, safe_skill_name
 from tanu.session import SessionManager
 
@@ -76,6 +80,20 @@ _cfg: dict = {}
 _mgr: Optional[SessionManager] = None
 _gmail_current_flow: Optional[object] = None
 _gmail_flow_lock = threading.Lock()
+
+
+def _stream_queue_size() -> int:
+    return max(16, min(int(_cfg.get("runtime", {}).get("stream_queue", 256)), 1024))
+
+
+def _put_stream_item(q: queue.Queue, item, cancelled: threading.Event) -> None:
+    """Apply backpressure without leaving a producer blocked after disconnect."""
+    while not cancelled.is_set():
+        try:
+            q.put(item, timeout=0.1)
+            return
+        except queue.Full:
+            continue
 
 
 def _deep_merge(base: dict, override: dict) -> None:
@@ -123,6 +141,8 @@ async def handle_get_status(request):
         tools = [s["function"]["name"] for s in ToolRegistry(_cfg).schema()]
     except Exception:
         pass
+    memory_mb = _mgr.memory_budget.current_mb() if _mgr else 0.0
+    memory_pressure = _mgr.memory_budget.pressure() if _mgr else "unknown"
     return web.json_response({
         "configured": bool(pname),
         "provider": pname or "",
@@ -132,6 +152,12 @@ async def handle_get_status(request):
         "ws_exists": ws.exists(),
         "tools": tools,
         "web_search": bool(brave),
+        "memory": {
+            "rss_mb": round(memory_mb, 1),
+            "pressure": memory_pressure,
+            "soft_limit_mb": _mgr.memory_budget.soft_limit_mb if _mgr else 0,
+            "hard_limit_mb": _mgr.memory_budget.hard_limit_mb if _mgr else 0,
+        },
         "telegram": {
             "enabled": tg.get("enabled", False),
             "has_token": bool(tg.get("token", "")),
@@ -188,6 +214,16 @@ async def handle_get_tools(request):
         return web.json_response(tools)
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
+
+
+async def handle_get_events(request):
+    topic = request.query.get("topic", "").strip().lower()
+    try:
+        limit = max(1, min(int(request.query.get("limit", "20")), 50))
+    except ValueError:
+        return web.json_response({"error": "limit must be an integer"}, status=400)
+    events = _mgr.event_bus.recent(topic=topic, limit=limit) if _mgr else []
+    return web.json_response({"events": events})
 
 
 async def handle_get_history(request):
@@ -417,26 +453,27 @@ async def handle_post_chat(request):
     )
     await response.prepare(request)
 
-    q: queue.Queue = queue.Queue()
+    q: queue.Queue = queue.Queue(maxsize=_stream_queue_size())
     final: list[str] = []
+    cancelled = threading.Event()
 
     def run():
         try:
             callbacks = {
-                "on_token":      lambda t:    q.put({"type": "token",      "content": t}),
-                "on_tool_start": lambda n, a: q.put({"type": "tool_start", "name": n, "args": a}),
-                "on_tool_done":  lambda n, r: q.put({"type": "tool_done",  "name": n,
-                                                      "result": r[:600] + ("…" if len(r) > 600 else "")}),
-                "on_error":      lambda e:    q.put({"type": "error",      "content": e}),
+                "on_token":      lambda t:    _put_stream_item(q, {"type": "token", "content": t}, cancelled),
+                "on_tool_start": lambda n, a: _put_stream_item(q, {"type": "tool_start", "name": n, "args": a}, cancelled),
+                "on_tool_done":  lambda n, r: _put_stream_item(q, {"type": "tool_done", "name": n,
+                                                                    "result": r[:600] + ("…" if len(r) > 600 else "")}, cancelled),
+                "on_error":      lambda e:    _put_stream_item(q, {"type": "error", "content": e}, cancelled),
             }
             agent = _mgr.get(session_id, callbacks=callbacks)
             history = _mgr.history(session_id)
-            result = agent.run(message, history=history, stream=True)
+            result = agent.run(message, history=history, stream=True, cancel_event=cancelled)
             final.append(result or "")
         except Exception as e:
-            q.put({"type": "error", "content": str(e)})
+            _put_stream_item(q, {"type": "error", "content": str(e)}, cancelled)
         finally:
-            q.put(None)
+            _put_stream_item(q, None, cancelled)
 
     threading.Thread(target=run, daemon=True).start()
 
@@ -445,7 +482,14 @@ async def handle_post_chat(request):
         item = await loop.run_in_executor(None, q.get)
         if item is None:
             break
-        await response.write(f"data: {json.dumps(item)}\n\n".encode())
+        try:
+            await response.write(f"data: {json.dumps(item)}\n\n".encode())
+        except (ConnectionResetError, RuntimeError):
+            cancelled.set()
+            break
+
+    if cancelled.is_set():
+        return response
 
     reply = "".join(final)
     _mgr.append(session_id, "user", message)
@@ -509,28 +553,29 @@ async def handle_ws_chat(request):
 
 async def _ws_stream_chat(ws: web.WebSocketResponse, message: str, session_id: str):
     """Run agent in thread, stream tokens over WebSocket."""
-    q: queue.Queue = queue.Queue()
+    q: queue.Queue = queue.Queue(maxsize=_stream_queue_size())
+    cancelled = threading.Event()
 
     def run():
         try:
             callbacks = {
-                "on_token":      lambda t:    q.put({"type": "token",      "content": t}),
-                "on_tool_start": lambda n, a: q.put({"type": "tool_start", "name": n, "args": a}),
-                "on_tool_done":  lambda n, r: q.put({"type": "tool_done",  "name": n,
-                                                      "result": r[:600] + ("…" if len(r) > 600 else "")}),
-                "on_error":      lambda e:    q.put({"type": "error",      "content": e}),
+                "on_token":      lambda t:    _put_stream_item(q, {"type": "token", "content": t}, cancelled),
+                "on_tool_start": lambda n, a: _put_stream_item(q, {"type": "tool_start", "name": n, "args": a}, cancelled),
+                "on_tool_done":  lambda n, r: _put_stream_item(q, {"type": "tool_done", "name": n,
+                                                                    "result": r[:600] + ("…" if len(r) > 600 else "")}, cancelled),
+                "on_error":      lambda e:    _put_stream_item(q, {"type": "error", "content": e}, cancelled),
             }
             agent = _mgr.get(session_id, callbacks=callbacks)
             history = _mgr.history(session_id)
-            result = agent.run(message, history=history, stream=True)
+            result = agent.run(message, history=history, stream=True, cancel_event=cancelled)
             _mgr.append(session_id, "user", message)
             _mgr.append(session_id, "assistant", result or "")
             if result:
-                q.put({"type": "response", "content": result})
+                _put_stream_item(q, {"type": "response", "content": result}, cancelled)
         except Exception as e:
-            q.put({"type": "error", "content": str(e)})
+            _put_stream_item(q, {"type": "error", "content": str(e)}, cancelled)
         finally:
-            q.put(None)
+            _put_stream_item(q, None, cancelled)
 
     threading.Thread(target=run, daemon=True).start()
 
@@ -542,6 +587,7 @@ async def _ws_stream_chat(ws: web.WebSocketResponse, message: str, session_id: s
         if item is None:
             break
         if ws.closed:
+            cancelled.set()
             break
         await ws.send_json(item)
 
@@ -614,6 +660,7 @@ def _build_app() -> web.Application:
     app.router.add_get("/api/memory", handle_get_memory)
     app.router.add_get("/api/skills", handle_get_skills)
     app.router.add_get("/api/tools", handle_get_tools)
+    app.router.add_get("/api/events", handle_get_events)
     app.router.add_get("/api/history", handle_get_history)
     app.router.add_get("/api/gmail/auth-url", handle_gmail_auth_url)
     app.router.add_get("/api/gmail/status", handle_gmail_status)
@@ -642,6 +689,27 @@ def run_server(cfg: dict, host: str = "127.0.0.1", port: int = 7337, quiet: bool
     global _cfg, _mgr
     _cfg = cfg
     _mgr = SessionManager(cfg)
+    memory_cfg = cfg.get("runtime", {}).get("memory", {})
+
+    def on_memory_pressure(level: str, current_mb: float) -> None:
+        _mgr.event_bus.publish(
+            f"memory.{level}",
+            {"rss_mb": round(current_mb, 1)},
+            source="server",
+        )
+        if level == "hard":
+            print(
+                f"[ERROR] Memory hard limit reached: {current_mb:.1f} MB; stopping server",
+                file=sys.stderr,
+            )
+            os.kill(os.getpid(), signal.SIGTERM)
+
+    watchdog = MemoryWatchdog(
+        _mgr.memory_budget,
+        on_pressure=on_memory_pressure,
+        interval_seconds=memory_cfg.get("watchdog_interval_seconds", 2.0),
+    )
+    watchdog.start()
 
     app = _build_app()
     url = f"http://{host}:{port}"
@@ -658,4 +726,7 @@ def run_server(cfg: dict, host: str = "127.0.0.1", port: int = 7337, quiet: bool
         except Exception:
             pass
 
-    web.run_app(app, host=host, port=port, print=None if quiet else None)
+    try:
+        web.run_app(app, host=host, port=port, print=None if quiet else None)
+    finally:
+        watchdog.stop()

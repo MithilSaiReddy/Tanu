@@ -63,6 +63,8 @@ class LLMProvider:
         max_tokens:  int   = 8192,
         temperature: float = 0.7,
         max_retries: int   = 5,
+        connect_timeout: int = 8,
+        read_timeout: int = 60,
     ):
         self.name        = name
         self.api_key     = api_key
@@ -71,6 +73,10 @@ class LLMProvider:
         self.max_tokens  = max_tokens
         self.temperature = temperature
         self.max_retries = max_retries
+        self.timeout = (
+            max(1, min(int(connect_timeout), 30)),
+            max(5, min(int(read_timeout), 180)),
+        )
         # Reused connection pool — skips the TCP/TLS handshake on every call,
         # which is the biggest per-turn latency win for multi-turn sessions.
         self._session = _requests.Session() if _HAS_REQUESTS else None
@@ -139,7 +145,7 @@ class LLMProvider:
             try:
                 resp = self._session.post(
                     url, headers=headers, json=payload,
-                    timeout=120, stream=stream,
+                    timeout=self.timeout, stream=stream,
                 )
             except _requests.exceptions.ConnectionError as e:
                 last_exc = LLMError(
@@ -265,6 +271,8 @@ class LLMProvider:
 
         if full_content and not token_cb:
             print()  # newline after stdout streaming
+        if cancelled:
+            response.close()
 
         msg: dict = {"role": "assistant", "content": full_content or None}
         if tool_calls_raw:

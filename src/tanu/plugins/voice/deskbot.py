@@ -25,6 +25,8 @@ import wave
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
+from tanu.runtime import MemoryWatchdog
+
 if TYPE_CHECKING:
     from tanu.plugins.voice.display import BaseDisplay
     from tanu.session import SessionManager
@@ -144,8 +146,14 @@ class DeskbotConnection:
 
         self._audio_input_device = dc.get("audio_input_device")
 
-        self._input_queue: queue.Queue[str] = queue.Queue()
-        self._tts_queue: queue.Queue[str] = queue.Queue()
+        runtime_cfg = cfg.get("runtime", {})
+        self._input_queue: queue.Queue[str] = queue.Queue(
+            maxsize=max(2, int(runtime_cfg.get("voice_input_queue", 8)))
+        )
+        self._stt_queue: queue.Queue[list] = queue.Queue(maxsize=2)
+        self._tts_queue: queue.Queue[str] = queue.Queue(
+            maxsize=max(4, int(runtime_cfg.get("voice_tts_queue", 16)))
+        )
         self._agent_cancel = threading.Event()
 
         global _tts_queue_ref, _simulate_queue_ref
@@ -154,10 +162,19 @@ class DeskbotConnection:
             _simulate_queue_ref = self._input_queue
 
         self._running = False
+        self.stopped_event = threading.Event()
+        memory_cfg = cfg.get("runtime", {}).get("memory", {})
+        self._memory_watchdog = MemoryWatchdog(
+            mgr.memory_budget,
+            on_pressure=self._on_memory_pressure,
+            interval_seconds=memory_cfg.get("watchdog_interval_seconds", 2.0),
+        )
 
     def run(self) -> None:
         """Start all three threads and block."""
         self._running = True
+        self.stopped_event.clear()
+        self._memory_watchdog.start()
 
         LOG.info(f"[Deskbot] Starting (simulate={self._simulate})")
         LOG.info(f"[Deskbot] moonshine={self._moonshine_bin}")
@@ -183,7 +200,7 @@ class DeskbotConnection:
 
         def signal_handler(sig, frame):
             LOG.info("[Deskbot] Shutting down...")
-            self._running = False
+            self.stop()
             self.display.show_idle()
 
         old_handler = None
@@ -194,8 +211,29 @@ class DeskbotConnection:
             while self._running:
                 time.sleep(0.5)
         finally:
+            self.stop()
+            self._memory_watchdog.stop()
             if old_handler is not None:
                 signal.signal(signal.SIGINT, old_handler)
+
+    def stop(self) -> None:
+        """Stop voice work and cancel the active agent turn."""
+        self._running = False
+        self._agent_cancel.set()
+        self.stopped_event.set()
+
+    def _on_memory_pressure(self, level: str, current_mb: float) -> None:
+        self.mgr.event_bus.publish(
+            f"memory.{level}",
+            {"rss_mb": round(current_mb, 1)},
+            source="voice",
+        )
+        if level == "hard":
+            LOG.error(
+                "[Deskbot] Memory hard limit reached: %.1f MB; stopping voice pipeline",
+                current_mb,
+            )
+            self.stop()
 
     def _simulate_thread(self) -> None:
         """Simulate voice input - file injection OR direct typing."""
@@ -299,7 +337,8 @@ class DeskbotConnection:
 
         audio_buffer = []
         silence_frames = 0
-        max_silence = int(600 / frame_duration)
+        endpoint_ms = int(self.cfg.get("deskbot", {}).get("endpoint_silence_ms", 350))
+        max_silence = max(6, int(endpoint_ms / frame_duration))
 
         LOG.info("[Deskbot] STT ready (webrtcvad + moonshine)")
 
@@ -318,9 +357,27 @@ class DeskbotConnection:
                 if audio_buffer:
                     silence_frames += 1
                     if silence_frames > max_silence:
-                        self._process_audio_buffer(audio_buffer)
+                        completed_buffer = audio_buffer
                         audio_buffer = []
                         silence_frames = 0
+                        try:
+                            self._stt_queue.put_nowait(completed_buffer)
+                        except queue.Full:
+                            LOG.warning("[STT] Transcription queue full; dropping utterance")
+
+        def transcribe_worker():
+            while self._running:
+                try:
+                    completed_buffer = self._stt_queue.get(timeout=0.5)
+                except queue.Empty:
+                    continue
+                self._process_audio_buffer(completed_buffer)
+
+        threading.Thread(
+            target=transcribe_worker,
+            daemon=True,
+            name="Transcription",
+        ).start()
 
         try:
             with sd.InputStream(
@@ -373,7 +430,10 @@ class DeskbotConnection:
 
             if transcript and len(transcript) >= 3:
                 LOG.info(f"[STT] {transcript}")
-                self._input_queue.put(transcript)
+                try:
+                    self._input_queue.put(transcript, timeout=1)
+                except queue.Full:
+                    LOG.warning("[STT] Input queue full; dropping transcript")
             else:
                 LOG.debug("[STT] Empty transcript")
 
@@ -393,8 +453,8 @@ class DeskbotConnection:
             nonlocal sentence_buffer
             sentence_buffer += token
 
-            sentence = self._extract_sentence(sentence_buffer)
-            if sentence:
+            sentence, sentence_buffer = self._pop_complete_sentence(sentence_buffer)
+            while sentence:
                 cleaned = _clean_for_tts(sentence)
                 if cleaned:
                     LOG.info(f"[Agent] Sentence: {cleaned[:50]}...")
@@ -403,7 +463,7 @@ class DeskbotConnection:
                     except queue.Full:
                         LOG.warning("[Deskbot] TTS queue full")
 
-                sentence_buffer = sentence_buffer[-50:]
+                sentence, sentence_buffer = self._pop_complete_sentence(sentence_buffer)
 
         while self._running:
             try:
@@ -437,41 +497,34 @@ class DeskbotConnection:
                 )
             except Exception as e:
                 LOG.error(f"[Agent] Error: {e}")
-                result = f"Sorry, I encountered an error."
-                if sentence_buffer:
-                    cleaned = _clean_for_tts(sentence_buffer)
-                    if cleaned:
-                        self._tts_queue.put(cleaned, timeout=1)
+                result = "Sorry, I encountered an error."
+                sentence_buffer = result
 
             if result:
                 self.mgr.append("tanu", "user", text)
                 self.mgr.append("tanu", "assistant", result)
 
-                for sentence in _split_sentences(result):
-                    cleaned = _clean_for_tts(sentence)
-                    if cleaned:
-                        LOG.debug(f"[TTS] {cleaned[:50]}...")
-                        try:
-                            self._tts_queue.put(cleaned, timeout=1)
-                        except queue.Full:
-                            LOG.warning("[Deskbot] TTS queue full")
+                # Stream callbacks already queued complete sentences. Queue only
+                # the trailing text that did not end in punctuation.
+                cleaned = _clean_for_tts(sentence_buffer)
+                if cleaned:
+                    try:
+                        self._tts_queue.put(cleaned, timeout=1)
+                    except queue.Full:
+                        LOG.warning("[Deskbot] TTS queue full")
 
             LOG.info(f"[Deskbot] Response queued")
 
-    def _extract_sentence(self, text: str) -> str:
-        """Extract complete sentence from buffer - ends with .!? and has 4+ words."""
-        import re
-
-        m = re.search(r"[.!?]\s*$", text)
-        if not m:
-            return ""
-
-        sentence = text[: m.end()].strip()
-        words = sentence.split()
-
-        if len(words) >= 4:
-            return sentence
-        return ""
+    @staticmethod
+    def _pop_complete_sentence(text: str) -> tuple[str, str]:
+        """Return the first speakable sentence and the unconsumed remainder."""
+        match = re.search(r"^(.+?[.!?])(?:\s+|$)", text, flags=re.DOTALL)
+        if not match:
+            return "", text
+        sentence = match.group(1).strip()
+        if len(sentence) < 4:
+            return "", text
+        return sentence, text[match.end():]
 
     def _thread_tts(self) -> None:
         """Thread 3: TTS — use piper subprocess with persistent process."""
@@ -502,17 +555,17 @@ class DeskbotConnection:
 
             try:
                 import sounddevice as sd
-                import numpy as np
 
-                audio_bytes = b""
-                for chunk in voice.synthesize(cleaned):
-                    if hasattr(chunk, "audio_int16_bytes"):
-                        audio_bytes += chunk.audio_int16_bytes
-
-                if audio_bytes:
-                    audio_array = np.frombuffer(audio_bytes, dtype=np.int16)
-                    sd.play(audio_array, samplerate=22050)
-                    sd.wait()
+                sample_rate = getattr(getattr(voice, "config", None), "sample_rate", 22050)
+                with sd.RawOutputStream(
+                    samplerate=sample_rate,
+                    channels=1,
+                    dtype="int16",
+                ) as output:
+                    for chunk in voice.synthesize(cleaned):
+                        audio = getattr(chunk, "audio_int16_bytes", b"")
+                        if audio:
+                            output.write(audio)
 
             except Exception as e:
                 LOG.error(f"[TTS] Error: {e}")

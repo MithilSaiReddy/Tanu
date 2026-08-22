@@ -1,56 +1,83 @@
 # Architecture Overview
 
+Tanu is local-first. Audio, wake-word support, speech recognition, speech
+synthesis, memory, tools, skills, scheduling, and the desktop UI run on the
+computer. Only the configured LLM provider and explicitly enabled connectors
+such as Gmail or web search use the network.
+
+```text
+┌──────────────────────── Desktop process ─────────────────────────┐
+│ Godot UI ◄──── loopback WebSocket ────► Python server            │
+│     │                                      │                     │
+│     └────────── 600/800 MB watchdog ───────┘                     │
+└──────────────────────────────────────────────────────────────────┘
+                                               │
+                    ┌──────────────────────────┴──────────────────┐
+                    │ Local runtime                              │
+                    │ SessionManager · MemoryBudget · EventBus   │
+                    └──────────────┬──────────────────────────────┘
+                                   │
+              ┌────────────────────┼─────────────────────┐
+              ▼                    ▼                     ▼
+       Agent + LLM client    Tools and skills      Voice pipeline
+       bounded context       bounded events        VAD → Moonshine
+       streamed responses    workspace sandbox     Piper → speakers
+              │
+              ▼
+       Configured LLM API
+       (the main AI network boundary)
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  python main.py desk                                        │
-│  ┌──────────────────────┐  ┌──────────────────────────────┐ │
-│  │ Python Server        │  │ Godot 4 Client               │ │
-│  │ (subprocess, :7337)  │  │ (subprocess)                 │ │
-│  │                      │  │                              │ │
-│  │ aiohttp HTTP + WS    │  │ WebSocket client (ws.gd)     │ │
-│  │ /ws/chat ────────────┤◄─┤ streams tokens + tool events  │ │
-│  │                      │  │                              │ │
-│  │ AgentLoop + Tools    │  │ Character (character.gd)     │ │
-│  │ LLM (OpenRouter/..)  │  │ idle ↔ listening ↔ thinking  │ │
-│  └──────────────────────┘  └──────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────┘
-```
 
-The Python server runs as a subprocess. The Godot client connects via
-WebSocket for real-time bidirectional communication.
+## Component communication
 
-## Design Principles
+`LocalEventBus` is the shared coordination layer. Agents, tools, skills, and
+runtime services publish small typed events without a network broker or extra
+process. Its history and payloads are bounded, so communication cannot grow
+memory indefinitely.
 
-1. **Separation of concerns** — The Python server handles all AI logic, tool
-   execution, and OAuth flows. The Godot client is purely a UI layer with
-   animated character rendering.
+Python tools receive the bus through `ToolContext`. Markdown-driven skills can
+use the `publish_event` and `read_events` tools to hand state to another skill.
+Runtime lifecycle events include `turn.started`, `turn.completed`,
+`tool.started`, `tool.completed`, `skills.changed`, and session events. Recent
+events are observable through `GET /api/events`.
 
-2. **WebSocket-first** — All chat communication uses WebSocket (`/ws/chat`)
-   for low-latency bidirectional streaming. HTTP endpoints remain for status
-   checks and Gmail OAuth.
+The event bus is intentionally ephemeral. Durable user facts belong in
+`USER.md` or `MEMORY.md`; durable task state belongs in its specific workspace
+store.
 
-3. **Animated character** — The Godot client draws a procedurally animated
-   face that transitions between states: idle, listening, thinking, speaking.
+## Memory policy
 
-4. **Server-driven** — All AI logic, tool execution, and OAuth flows live in
-   the Python server. The Godot client connects to `ws://localhost:7337/ws/chat`.
+The default target is a 600 MB soft limit and an 800 MB hard limit for the
+desktop process tree:
 
-5. **Extensible tools** — Any Python module in `src/tanu/tools/` with a
-   `@register_tool` decorator is auto-discovered and becomes available to the LLM.
+- At soft pressure, garbage collection runs and idle sessions are evicted.
+- At hard pressure, new agent/tool work is refused and desktop mode shuts down
+  safely instead of continuing toward an operating-system out-of-memory event.
+- Sessions, histories, tool output, event history, streaming queues, voice
+  queues, sub-agent iterations, and parallel tool workers are all bounded.
+- Piper is loaded once and reused. Only one Moonshine transcription worker is
+  active.
 
-## Key Paths
+Actual baseline RAM varies by operating system, audio drivers, Godot renderer,
+and selected speech models. The watchdog enforces the configured process-tree
+limit when `psutil` can inspect all child processes.
+
+## Design principles
+
+1. Local by default; network connectors are explicit.
+2. Bounded queues and histories instead of unbounded accumulation.
+3. One in-process event bus instead of Redis, RabbitMQ, or another daemon.
+4. Streaming across LLM, TTS, and WebSocket boundaries.
+5. Workspace-scoped tools with clear security boundaries.
+
+## Key paths
 
 | Path | Purpose |
 |------|---------|
-| `main.py` | Entry points: `desk`, `serve`, `tanu`, `agent` |
-| `src/godot/` | Godot 4 project (character UI + WebSocket client) |
-| `src/godot/autoload/ws.gd` | WebSocket client singleton |
-| `src/godot/scripts/character.gd` | Animated character state machine |
-| `src/godot/scripts/main.gd` | Scene controller (input + WS + UI) |
-| `src/tanu/` | Python package: agent framework, server, tools, voice, connections |
-| `build.sh / build.ps1` | Build scripts (produce build/) |
-| `setup.sh / setup.ps1` | Dev environment setup scripts |
-| `build/` | Godot binary output (gitignored) |
-| `config/` | Local configuration files (gitignored) |
-| `workspace/` | Runtime data: identity files, tokens, cron |
-| `docs/` | MkDocs technical documentation |
+| `src/tanu/runtime.py` | Local event bus, memory budget, watchdog |
+| `src/tanu/agent.py` | Bounded agent/tool loop |
+| `src/tanu/session.py` | Reused, capped sessions and histories |
+| `src/tanu/tools/events.py` | Skill-facing local event tools |
+| `src/tanu/plugins/voice/deskbot.py` | Local STT/TTS pipeline |
+| `src/tanu/server.py` | Loopback HTTP/WebSocket API |
+| `src/godot/` | Godot desktop UI |

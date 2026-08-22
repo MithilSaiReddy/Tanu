@@ -11,6 +11,7 @@ Changes vs v1:
 from __future__ import annotations
 
 import shutil
+from itertools import islice
 from pathlib import Path
 
 from tanu.tools.base import ToolContext, register_tool
@@ -69,7 +70,15 @@ def read_file(path: str, _ctx: ToolContext = None) -> str:
     if p.is_dir():
         return f"[ERROR] '{p}' is a directory — use list_files to inspect it."
     try:
-        text = p.read_text(encoding="utf-8", errors="replace")
+        limit = int(
+            (_ctx.cfg if _ctx else {}).get("agents", {}).get("defaults", {}).get(
+                "max_tool_output_chars", 6000
+            )
+        )
+        with p.open(encoding="utf-8", errors="replace") as handle:
+            text = handle.read(limit + 1)
+        if len(text) > limit:
+            text = text[:limit] + f"\n[… file truncated at {limit:,} characters …]"
         return text if text else "(file is empty)"
     except Exception as e:
         return f"[READ ERROR] {e}"
@@ -151,7 +160,9 @@ def list_files(path: str = ".", _ctx: ToolContext = None) -> str:
         return f"(file) {p}  [{sz:,} bytes]"
 
     try:
-        items = sorted(p.iterdir(), key=lambda x: (x.is_file(), x.name.lower()))
+        sampled_items = list(islice(p.iterdir(), 501))
+        listing_truncated = len(sampled_items) > 500
+        items = sorted(sampled_items[:500], key=lambda x: (x.is_file(), x.name.lower()))
     except PermissionError:
         return f"[PERMISSION ERROR] Cannot read {p}"
 
@@ -168,6 +179,8 @@ def list_files(path: str = ".", _ctx: ToolContext = None) -> str:
 
     summary = f"\n\n{len([i for i in items if i.is_dir()])} dirs, " \
               f"{len([i for i in items if i.is_file()])} files"
+    if listing_truncated:
+        summary += " (showing at most 500 entries)"
     return f"Contents of {p}:\n" + "\n".join(lines) + summary
 
 @register_tool(

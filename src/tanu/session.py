@@ -27,9 +27,11 @@ mgr.append("telegram:123456789", "assistant", result)
 from __future__ import annotations
 
 import threading
+import time
 from typing import Callable, Optional
 
 from tanu.agent import AgentLoop
+from tanu.runtime import runtime_from_config
 
 class SessionManager:
     """
@@ -42,13 +44,17 @@ class SessionManager:
         "web:<uuid>"            → one browser tab
     """
 
-    MAX_HISTORY = 40   # messages (20 turns)
-
     def __init__(self, cfg: dict):
         self.cfg      = cfg
         self._agents:  dict[str, AgentLoop]   = {}
         self._history: dict[str, list]        = {}
-        self._lock = threading.Lock()
+        self._last_used: dict[str, float]      = {}
+        runtime_cfg = cfg.get("runtime", {})
+        self.max_history = max(4, min(int(runtime_cfg.get("max_history_messages", 24)), 80))
+        self.max_sessions = max(1, min(int(runtime_cfg.get("max_sessions", 6)), 32))
+        self.idle_seconds = max(60, int(runtime_cfg.get("session_idle_seconds", 1800)))
+        self.event_bus, self.memory_budget = runtime_from_config(cfg)
+        self._lock = threading.RLock()
 
     # ── Agents ────────────────────────────────────────────────────────────
 
@@ -61,12 +67,24 @@ class SessionManager:
         """Return the AgentLoop for this session, creating it if needed.
         Always updates callbacks so each request gets fresh ones."""
         with self._lock:
+            self._evict_idle_locked(exclude=session_id)
+            if self.memory_budget.pressure() == "soft":
+                self._evict_oldest_locked(exclude=session_id)
             if session_id not in self._agents:
+                while len(self._agents) >= self.max_sessions:
+                    self._evict_oldest_locked(exclude=session_id)
+                if self.memory_budget.pressure() == "hard":
+                    self.memory_budget.trim()
+                    if self.memory_budget.pressure() == "hard":
+                        raise MemoryError("Tanu memory hard limit reached")
                 self._agents[session_id] = AgentLoop(
                     self.cfg,
                     send_message_fn = send_message_fn,
                     callbacks       = callbacks or {},
+                    event_bus       = self.event_bus,
+                    memory_budget   = self.memory_budget,
                 )
+                self.event_bus.publish("session.created", {"session_id": session_id}, source="session")
             else:
                 agent = self._agents[session_id]
                 if callbacks:
@@ -75,6 +93,7 @@ class SessionManager:
                         "on_tool_start": callbacks.get("on_tool_start"),
                         "on_tool_done":  callbacks.get("on_tool_done"),
                     }
+            self._last_used[session_id] = time.monotonic()
             return self._agents[session_id]
 
     def update_callbacks(self, session_id: str, callbacks: dict) -> None:
@@ -85,12 +104,15 @@ class SessionManager:
         with self._lock:
             if session_id in self._agents:
                 self._agents[session_id].callbacks = callbacks
+                self._last_used[session_id] = time.monotonic()
 
     def close(self, session_id: str) -> None:
         """Remove a session and its history."""
         with self._lock:
             self._agents.pop(session_id, None)
             self._history.pop(session_id, None)
+            self._last_used.pop(session_id, None)
+            self.event_bus.publish("session.closed", {"session_id": session_id}, source="session")
 
     # ── History ───────────────────────────────────────────────────────────
 
@@ -104,19 +126,46 @@ class SessionManager:
         with self._lock:
             hist = self._history.setdefault(session_id, [])
             hist.append({"role": role, "content": content})
-            if len(hist) > self.MAX_HISTORY:
+            if len(hist) > self.max_history:
                 # Keep system message if present, then trim oldest turns
                 if hist and hist[0]["role"] == "system":
-                    self._history[session_id] = [hist[0]] + hist[-(self.MAX_HISTORY - 1):]
+                    self._history[session_id] = [hist[0]] + hist[-(self.max_history - 1):]
                 else:
-                    self._history[session_id] = hist[-self.MAX_HISTORY:]
+                    self._history[session_id] = hist[-self.max_history:]
+            self._last_used[session_id] = time.monotonic()
 
     def clear(self, session_id: str) -> None:
         """Wipe history for a session without destroying the agent."""
         with self._lock:
-            self._history[session_id] = []
+            self._history.pop(session_id, None)
 
     def sessions(self) -> list[str]:
         """Return list of active session IDs."""
         with self._lock:
             return list(self._agents)
+
+    def _evict_idle_locked(self, exclude: str = "") -> None:
+        cutoff = time.monotonic() - self.idle_seconds
+        for session_id, last_used in list(self._last_used.items()):
+            if session_id != exclude and last_used < cutoff:
+                self._evict_locked(session_id, "idle")
+
+    def _evict_oldest_locked(self, exclude: str = "") -> None:
+        candidates = [
+            (last_used, session_id)
+            for session_id, last_used in self._last_used.items()
+            if session_id != exclude and session_id in self._agents
+        ]
+        if candidates:
+            _, session_id = min(candidates)
+            self._evict_locked(session_id, "memory")
+
+    def _evict_locked(self, session_id: str, reason: str) -> None:
+        if self._agents.pop(session_id, None) is not None:
+            self._history.pop(session_id, None)
+            self._last_used.pop(session_id, None)
+            self.event_bus.publish(
+                "session.evicted",
+                {"session_id": session_id, "reason": reason},
+                source="session",
+            )

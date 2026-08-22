@@ -41,7 +41,20 @@ The active configuration is always `~/.tanu/config.json`. Run
       "path": "/home/user/Documents/Tanu/src/Tanu/src/tanu/tools",
       "package": "tanu.tools"
     }
-  ]
+  ],
+  "runtime": {
+    "local_only": true,
+    "allow_subagents": false,
+    "max_skills": 32,
+    "max_active_skill_chars": 12000,
+    "max_parallel_tools": 3,
+    "max_sessions": 6,
+    "max_history_messages": 24,
+    "memory": {
+      "soft_limit_mb": 600,
+      "hard_limit_mb": 800
+    }
+  }
 }
 ```
 
@@ -78,10 +91,25 @@ LLM provider configurations. Supports any OpenAI-compatible API.
 
 Tool-specific configuration:
 
-- **`web.search`** — Brave Search API key (optional; falls back to mock search)
+- **`web.search`** — Optional online search settings
 - **`gmail.client_creds`** — Stringified JSON of a Google Cloud OAuth desktop client credential
 
 ### `tool_paths`
 
 An array of directories that `ToolRegistry` auto-discovers for additional tools.
 Tanu's `src/tanu/tools/` is injected automatically when using `tanu.config.load_config()`.
+
+### `runtime`
+
+Controls bounded component communication and resource usage. The default event
+bus keeps 128 small in-memory events, tool execution uses at most three parallel
+workers, and only six agent sessions remain warm. The 600 MB soft limit triggers
+cleanup; the 800 MB hard limit refuses new work and safely stops desktop mode.
+
+`local_only` hides web and Gmail tools by default, reducing network exposure and
+the tool schema sent to the LLM. Set it to `false` only when online connectors
+are wanted. Sub-agents are disabled by default because every additional agent
+adds context and connection state; enable them with `allow_subagents`.
+
+Keep the hard limit above the soft limit by at least 32 MB. Speech-model and
+Godot memory varies by platform, so use `GET /api/status` to observe actual RSS.

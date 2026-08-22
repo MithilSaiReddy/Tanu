@@ -15,6 +15,7 @@ def cmd_onboard(args):
 def cmd_tanu(args):
     cfg = load_tanu_config()
     from tanu.plugins.voice.deskbot import DeskbotConnection
+    from tanu.plugins.voice.display import NullDisplay
     from tanu.agent import HeartbeatService, CronService
     from tanu.session import SessionManager
 
@@ -23,7 +24,7 @@ def cmd_tanu(args):
     ws = workspace_path(cfg)
     mgr = SessionManager(cfg)
 
-    conn = DeskbotConnection(cfg, mgr, None)
+    conn = DeskbotConnection(cfg, mgr, NullDisplay())
     heartbeat = HeartbeatService(mgr.get("tanu"), ws)
     cron = CronService(mgr.get("tanu"), ws)
 
@@ -41,12 +42,11 @@ def cmd_tanu(args):
         t.start()
 
     try:
-        import time
-
-        while True:
-            time.sleep(1)
+        while not conn.stopped_event.wait(1):
+            pass
     except KeyboardInterrupt:
         print("\n🎙️ Shutting down...")
+        conn.stop()
 
 
 def cmd_status(args):

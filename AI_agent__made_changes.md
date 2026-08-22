@@ -1,7 +1,7 @@
 # AI Agent Changes
 
 Date: 2026-08-22
-Branch: `codex/product-readiness`
+Target branch: `checking-branch` (`main` is intentionally untouched)
 
 ## Reliability
 
@@ -30,9 +30,29 @@ Branch: `codex/product-readiness`
 ## Validation performed
 
 - All Python sources parsed successfully.
-- All 5 unit tests passed.
+- The initial 5 unit tests passed.
 - Bash syntax validation passed for setup, build, and launch scripts.
 - The installed-package CLI help loaded successfully without bytecode/build artifacts.
 - `git diff --check` passed.
 
 Full voice, Godot export, Gmail OAuth, and live LLM calls require their external binaries, credentials, and services and were not run during this lightweight local audit.
+
+## Local runtime and latency update
+
+- Bumped the package version to 2.1.0 for the runtime architecture update.
+- Added a bounded in-process `LocalEventBus` for agent, tool, skill, session, and runtime communication without an external broker.
+- Added `publish_event` and `read_events` tools plus a local `/api/events` diagnostics endpoint.
+- Added a process-tree memory budget with a 600 MB soft limit, 800 MB hard limit, garbage-collection pressure handling, and a desktop watchdog that shuts down safely at the hard limit.
+- Bounded warm sessions, conversation history, event history/payloads, streaming queues, voice queues, parallel tool workers, tool output, sub-agent iterations, LLM output, and retry counts.
+- Made online Gmail/web tools and memory-heavier sub-agents opt-in, reducing the default LLM tool schema and keeping the standard runtime local except for its configured LLM.
+- Shared the event bus and memory budget with sub-agents and refused expensive sub-agent/tool work during memory pressure.
+- Moved Moonshine transcription out of the microphone callback, reduced default endpoint silence from 600 ms to 350 ms, and bounded pending utterances.
+- Streamed Piper audio chunks directly to the output device and removed duplicated end-of-response speech queuing.
+- Enabled streaming for final LLM responses after tool calls.
+- Bounded skill loading plus file, directory, and shell-command output before it enters memory; shortened interactive LLM connection/retry limits.
+- Fixed web search returning an empty result despite successful search results.
+- Added runtime, event-bus, memory-pressure, and voice-buffer unit tests and replaced outdated architecture/data-flow documentation.
+
+Validation after this update: 15 unit tests passed, all 45 Python files parsed,
+shell syntax checks passed, runtime integration passed with network/sub-agent
+tools disabled by default, and `git diff --check` passed.
