@@ -6,9 +6,6 @@ import sys
 import argparse
 from pathlib import Path
 
-from tanu import LOGO as BUJJI_LOGO
-
-
 def cmd_onboard(args):
     from tanu.onboard import run_onboard
 
@@ -21,7 +18,9 @@ def cmd_tanu(args):
     from tanu.agent import HeartbeatService, CronService
     from tanu.session import SessionManager
 
-    ws = Path(cfg["agents"]["defaults"]["workspace"])
+    from tanu.config import workspace_path
+
+    ws = workspace_path(cfg)
     mgr = SessionManager(cfg)
 
     conn = DeskbotConnection(cfg, mgr, None)
@@ -51,15 +50,36 @@ def cmd_tanu(args):
 
 
 def cmd_status(args):
-    from tanu.config import load_config
+    from tanu.config import CONFIG_FILE, get_active_provider, load_config, workspace_path
     from tanu import __version__
 
     cfg = load_config()
-    pname, api_key, _, model = cfg.get("active_provider"), "", "", ""
+    pname, _, _, model = get_active_provider(cfg)
 
     print(f"\n🎙️ Tanu v{__version__}")
-    print(f"  Config: {cfg}")
-    # ... simplified for now
+    print(f"  Config: {CONFIG_FILE}")
+    print(f"  Configured: {'yes' if pname else 'no'}")
+    print(f"  Provider: {pname or '-'} / {model or '-'}")
+    print(f"  Workspace: {workspace_path(cfg)}")
+
+
+def cmd_agent(args):
+    """Start a terminal chat without initializing audio devices."""
+    from tanu.session import SessionManager
+    from tanu.tools.speak_tool import set_print_mode
+
+    cfg = load_tanu_config()
+    set_print_mode(True)
+    agent = SessionManager(cfg).get("cli")
+    print("\n🎙️ Tanu terminal chat (Ctrl+D to exit)\n")
+    while True:
+        try:
+            message = input("You: ").strip()
+            if message:
+                print(f"Tanu: {agent.run(message, stream=False)}")
+        except (EOFError, KeyboardInterrupt):
+            print("\nShutting down...")
+            return
 
 
 def load_tanu_config():
@@ -75,6 +95,7 @@ def main():
     sub.add_parser("onboard", help="First-time setup")
     sub.add_parser("tanu", help="Start voice assistant")
     sub.add_parser("status", help="Show status")
+    sub.add_parser("agent", help="Terminal chat (no audio)")
 
     args = parser.parse_args()
 
@@ -82,6 +103,7 @@ def main():
         "onboard": cmd_onboard,
         "tanu": cmd_tanu,
         "status": cmd_status,
+        "agent": cmd_agent,
     }
 
     if args.command in cmds:

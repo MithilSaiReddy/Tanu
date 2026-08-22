@@ -78,7 +78,7 @@ DEFAULT_CONFIG = {
             "subagent_max_iterations": 50,
             "llm_retries": 5,
             "fallback_providers": [],
-            "restrict_to_workspace": False,
+            "restrict_to_workspace": True,
             "enabled_tools": [],
             "disabled_tools": [],
             "context": {
@@ -161,7 +161,10 @@ def load_config() -> dict:
 
     # Inject tool_paths for ToolRegistry auto-discovery
     tools_dir = str(Path(__file__).resolve().parent / "tools")
-    if tools_dir not in [p.get("path") for p in cfg.get("tool_paths", [])]:
+    configured_paths = [
+        p.get("path") for p in cfg.get("tool_paths", []) if isinstance(p, dict)
+    ]
+    if tools_dir not in configured_paths:
         cfg.setdefault("tool_paths", []).append(
             {"path": tools_dir, "package": "tanu.tools"}
         )

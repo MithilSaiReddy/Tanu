@@ -25,6 +25,9 @@ fi
 
 # Find Godot binary
 find_godot() {
+    if [ -n "${GODOT:-}" ] && [ -x "$GODOT" ]; then
+        return
+    fi
     GODOT=""
     for bin in godot godot4; do
         if command -v "$bin" &>/dev/null; then

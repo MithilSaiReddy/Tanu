@@ -66,7 +66,7 @@ The client connects to `ws://localhost:7337/ws/chat` and exchanges JSON messages
 | Command | Description |
 |---------|-------------|
 | `python3 main.py desk` | Launch server + Godot desktop app |
-| `python3 main.py serve` | Launch server only (web UI + WebSocket) |
+| `python3 main.py serve` | Launch the local HTTP/WebSocket API only |
 | `python3 main.py tanu` | Voice assistant mode |
 | `python3 main.py tanu --text` | Text-only terminal assistant |
 | `python3 main.py onboard` | First-time configuration wizard |

@@ -1,22 +1,2 @@
-# Tanu package (unified — agent framework, tools, server, UI all under src/tanu/)
--e .
-
-# Core dependencies
-requests
-aiohttp
-sounddevice
-piper-tts
-
-# Optional: Wake word detection
-openwakeword
-
-# Optional: Gmail
-google-auth
-google-auth-oauthlib
-google-api-python-client
-
-# Optional: Notifications (cross-platform)
-plyer
-
-# Optional: Discord
-discord.py
+# Editable development install with all product integrations.
+-e .[voice,wakeword,notify,gmail,discord]

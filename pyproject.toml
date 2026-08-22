@@ -5,10 +5,10 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "tanu"
 version = "2.0.0"
-description = "Voice assistant for DeskBot"
+description = "Local-first desktop AI assistant with tools and voice"
 readme = "README.md"
 requires-python = ">=3.9"
-license = {text = "MIT"}
+license = {file = "LICENSE"}
 authors = [
     {name = "Mithil Reddy", email = "mithilsaireddy@gmail.com"}
 ]
@@ -59,6 +59,9 @@ tanu = "tanu.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+tanu = ["assets/**/*"]
 
 [project.urls]
 Homepage = "https://github.com/MithilSaiReddy/Tanu"

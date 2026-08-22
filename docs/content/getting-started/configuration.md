@@ -4,13 +4,8 @@ Tanu uses a JSON configuration file located at `~/.tanu/config.json`.
 
 ## Configuration File Location
 
-| Source | Path |
-|--------|------|
-| Default config | `~/.tanu/config.json` |
-| Project config | `config/config.json` (in repo root) |
-
-The config is loaded from `~/.tanu/config.json`. During development you may copy
-`config/config.json` to `~/.tanu/config.json`.
+The active configuration is always `~/.tanu/config.json`. Run
+`python3 main.py onboard` to create or update it.
 
 ## Structure
 
@@ -26,7 +21,8 @@ The config is loaded from `~/.tanu/config.json`. During development you may copy
   "agents": {
     "defaults": {
       "model": "openai/gpt-4o",
-      "workspace": "/home/user/Documents/Tanu/src/Tanu/workspace"
+      "workspace": "workspace",
+      "restrict_to_workspace": true
     }
   },
   "tools": {
@@ -75,7 +71,8 @@ LLM provider configurations. Supports any OpenAI-compatible API.
 | Key | Description |
 |-----|-------------|
 | `model` | Model string sent to the provider |
-| `workspace` | Absolute path to the workspace directory |
+| `workspace` | Absolute path or path relative to the repository root |
+| `restrict_to_workspace` | Keep file and shell tools inside the workspace (recommended) |
 
 ### `tools`
 

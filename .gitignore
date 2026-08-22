@@ -25,6 +25,9 @@ workspace/USER.md
 workspace/USER.md.bak
 workspace/HEARTBEAT.md
 workspace/tanu/
+workspace/**/*.bak
+workspace/**/*.lock
+workspace/cron/jobs.json
 .env*
 src/tanu/config.json
 src/tanu/tools/credentials.json

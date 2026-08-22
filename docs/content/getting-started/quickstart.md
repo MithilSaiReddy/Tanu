@@ -64,13 +64,13 @@ python3 main.py desk
 This starts the Python server and launches the Godot client. The client connects
 to the server via WebSocket automatically.
 
-### Web UI Only
+### Local API Only
 
 ```bash
 python3 main.py serve
 ```
 
-Then open `http://localhost:7337` in a browser.
+This starts the local HTTP/WebSocket API at `http://localhost:7337`.
 
 ### Terminal Chat
 
@@ -99,4 +99,4 @@ See [Gmail Integration](../guide/gmail-integration.md) for setting up email acce
 | "Connecting..." stuck | Server not running | Ensure `python3 main.py desk` is running |
 | Godot window not appearing | Binary not built | Run `bash build.sh` or export from Godot editor |
 | No response to messages | WebSocket not connected | Check server is running on port 7337 |
-| Gmail tools not found by LLM | `tool_paths` not injected | Use `python3 main.py desk` (not `main.py serve` alone) |
+| Gmail tools not found by LLM | Optional Gmail dependencies missing | Install the Gmail dependencies shown above |

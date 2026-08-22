@@ -1,8 +1,0 @@
-[
-  {
-    "name": "example-weather-check",
-    "prompt": "Check today's weather and save a summary to weather.md",
-    "interval_minutes": 1440,
-    "last_run": null
-  }
-]

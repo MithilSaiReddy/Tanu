@@ -95,46 +95,17 @@ python -m pip install --quiet -r requirements.txt
 Log "Python dependencies installed"
 
 # ────────────────────────────────────────────────────────────
-# 5. Create local config if missing
+# 5. Create the user config if missing
 # ────────────────────────────────────────────────────────────
-New-Item -ItemType Directory -Force -Path config | Out-Null
-
-if (-not (Test-Path config/config.json)) {
-    Info "Creating default config/config.json..."
-    @'
-{
-  "active_provider": "",
-  "agents": {
-    "defaults": {
-      "workspace": "workspace",
-      "model": "",
-      "max_tokens": 8192,
-      "temperature": 0.7,
-      "max_tool_iterations": 20,
-      "restrict_to_workspace": false
-    }
-  },
-  "providers": {},
-  "channels": {
-    "telegram": { "enabled": false, "token": "", "allow_from": [] },
-    "discord":  { "enabled": false, "token": "", "allow_from": [] }
-  },
-  "tool_paths": [
-    { "path": "src/tanu/tools", "package": "tanu.tools" }
-  ],
-  "tools": {
-    "web": { "search": { "api_key": "", "max_results": 5 } },
-    "gmail": { "client_creds": "" }
-  }
-}
-'@ | Set-Content -Path config/config.json
-    Log "config/config.json created — run 'python main.py onboard' to configure"
+if (-not (Test-Path "$HOME/.tanu/config.json")) {
+    python -c "from tanu.config import load_config, save_config; save_config(load_config())"
+    Log "~/.tanu/config.json created — run 'python main.py onboard' to configure"
 } else {
-    Warn "config/config.json already exists (keeping as-is)"
+    Warn "~/.tanu/config.json already exists (keeping as-is)"
 }
 
 # ────────────────────────────────────────────────────────────
-# 7. Create workspace directories
+# 6. Create workspace directories
 # ────────────────────────────────────────────────────────────
 New-Item -ItemType Directory -Force -Path workspace/tanu | Out-Null
 

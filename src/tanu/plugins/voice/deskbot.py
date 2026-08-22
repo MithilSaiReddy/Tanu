@@ -136,7 +136,10 @@ class DeskbotConnection:
             dc.get("piper_bin", str(src_dir / "assets" / "piper" / "piper"))
         )
         self._piper_model = os.path.expanduser(
-            dc.get("piper_model", str(src_dir / "assets" / "piper" / "en_US-lessac-medium.onnx"))
+            dc.get(
+                "piper_model",
+                str(src_dir / "assets" / "piper" / "voices" / "en_US-lessac-medium.onnx"),
+            )
         )
 
         self._audio_input_device = dc.get("audio_input_device")

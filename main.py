@@ -6,7 +6,7 @@ Usage:
     python main.py tanu              # Start voice assistant
     python main.py tanu --text       # Text mode (no audio)
     python main.py onboard           # First-time setup
-    python main.py serve             # Web UI (HTTP + WebSocket)
+    python main.py serve             # Local API (HTTP + WebSocket)
     python main.py desk              # Desktop app (Godot + server)
     python main.py agent             # Chat in terminal
 
@@ -50,7 +50,7 @@ def cmd_tanu(args):
 
     cfg = load_config()
     mgr = SessionManager(cfg)
-    ws = Path(cfg["agents"]["defaults"]["workspace"])
+    ws = workspace_path(cfg)
 
     simulate = getattr(args, "simulate", False)
     text_mode = getattr(args, "text_mode", False)
@@ -69,7 +69,7 @@ def cmd_tanu(args):
     conn = DeskbotConnection(cfg, mgr, display, simulate=simulate)
 
     try:
-        from tools.tanu_reminder import init_worker
+        from tanu.tools.tanu_reminder import init_worker
         reminder_worker = init_worker(ws)
         reminder_worker.start()
     except Exception:
@@ -100,8 +100,6 @@ def cmd_tanu(args):
 
 def cmd_tanu_text(cfg, mgr):
     from tanu.tools.speak_tool import set_print_mode
-    ws = Path(cfg["agents"]["defaults"]["workspace"])
-
     set_print_mode(True)
 
     print(f"\n🎙️ Tanu text mode (Ctrl+D to exit)\n")
@@ -122,6 +120,12 @@ def cmd_tanu_text(cfg, mgr):
             break
 
 
+def cmd_agent(args):
+    """Start a terminal chat without initializing audio devices."""
+    cfg = load_config()
+    cmd_tanu_text(cfg, SessionManager(cfg))
+
+
 def cmd_serve(args):
     from tanu.config import load_config
     from tanu.server import run_server
@@ -132,17 +136,18 @@ def cmd_serve(args):
 
 def cmd_status(args):
     from tanu import __version__
-    from tanu.config import load_config
+    from tanu.config import CONFIG_FILE, load_config
 
     cfg = load_config()
     pname, api_key, api_base, model = get_active_provider(cfg)
     ws = workspace_path(cfg)
 
     print(f"\n🎙️ Tanu v{__version__}")
-    print(f"  Config: {cfg}")
-    print(f"  Provider: {pname} / {model}")
+    print(f"  Config: {CONFIG_FILE}")
+    print(f"  Configured: {'yes' if pname else 'no'}")
+    print(f"  Provider: {pname or '-'} / {model or '-'}")
     print(f"  Workspace: {ws}")
-    print(f"  Web UI: python main.py serve → http://localhost:7337\n")
+    print(f"  Local API: python main.py serve → http://localhost:7337\n")
 
 
 def _run_server(port: int):
@@ -284,9 +289,10 @@ def main():
     sub = parser.add_subparsers(dest="command")
 
     sub.add_parser("onboard", help="First-time setup")
-    sub.add_parser("serve", help="Web UI")
+    sub.add_parser("serve", help="Local HTTP/WebSocket API")
     sub.add_parser("status", help="Show status")
     sub.add_parser("desk", help="Desktop app (Godot + server)")
+    sub.add_parser("agent", help="Terminal chat (no audio)")
 
     p_update = sub.add_parser("update", help="Update Tanu from GitHub")
     p_update.add_argument("--check", action="store_true", help="Check for updates without pulling")
@@ -308,6 +314,7 @@ def main():
         "serve": cmd_serve,
         "status": cmd_status,
         "desk": cmd_desk,
+        "agent": cmd_agent,
         "update": cmd_update,
     }
 

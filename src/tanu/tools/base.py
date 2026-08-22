@@ -373,7 +373,7 @@ class ToolRegistry:
         self.cfg             = cfg
         self.workspace       = workspace or workspace_path(cfg)
         self.workspace.mkdir(parents=True, exist_ok=True)
-        self.restrict        = cfg["agents"]["defaults"].get("restrict_to_workspace", False)
+        self.restrict        = cfg["agents"]["defaults"].get("restrict_to_workspace", True)
         self.send_message_fn = send_message_fn
         self.max_output      = cfg["agents"]["defaults"].get(
             "max_tool_output_chars", self.DEFAULT_MAX_OUTPUT

@@ -51,8 +51,7 @@ info "Checking prerequisites..."
 PYTHON=""
 for cmd in python3.12 python3.11 python3.10 python3; do
     if command -v "$cmd" &>/dev/null; then
-        ver=$("$cmd" --version 2>&1 | grep -oP '\d+\.\d+')
-        if awk "BEGIN { exit ($ver < 3.9) }"; then
+        if "$cmd" -c 'import sys; raise SystemExit(sys.version_info < (3, 9))'; then
             PYTHON="$cmd"
             break
         fi
@@ -149,46 +148,17 @@ pip install --quiet -r requirements.txt
 log "Python dependencies installed"
 
 # ─────────────────────────────────────────────────────────────
-# 5. Create local config if missing
+# 5. Create the user config if missing
 # ─────────────────────────────────────────────────────────────
-mkdir -p config
-
-if [ ! -f config/config.json ]; then
-    info "Creating default config/config.json..."
-    cat > config/config.json << 'CONFIG_EOF'
-{
-  "active_provider": "",
-  "agents": {
-    "defaults": {
-      "workspace": "workspace",
-      "model": "",
-      "max_tokens": 8192,
-      "temperature": 0.7,
-      "max_tool_iterations": 20,
-      "restrict_to_workspace": false
-    }
-  },
-  "providers": {},
-  "channels": {
-    "telegram": { "enabled": false, "token": "", "allow_from": [] },
-    "discord":  { "enabled": false, "token": "", "allow_from": [] }
-  },
-  "tool_paths": [
-    { "path": "src/tanu/tools", "package": "tanu.tools" }
-  ],
-  "tools": {
-    "web": { "search": { "api_key": "", "max_results": 5 } },
-    "gmail": { "client_creds": "" }
-  }
-}
-CONFIG_EOF
-    log "config/config.json created — run 'python3 main.py onboard' to configure"
+if [ ! -f "$HOME/.tanu/config.json" ]; then
+    python -c 'from tanu.config import load_config, save_config; save_config(load_config())'
+    log "~/.tanu/config.json created — run 'python3 main.py onboard' to configure"
 else
-    warn "config/config.json already exists (keeping as-is)"
+    warn "~/.tanu/config.json already exists (keeping as-is)"
 fi
 
 # ─────────────────────────────────────────────────────────────
-# 7. Create workspace directories
+# 6. Create workspace directories
 # ─────────────────────────────────────────────────────────────
 mkdir -p workspace/tanu
 
@@ -202,7 +172,7 @@ done
 log "Workspace directories ready"
 
 # ─────────────────────────────────────────────────────────────
-# 8. Summary & next steps
+# 7. Summary & next steps
 # ─────────────────────────────────────────────────────────────
 echo ""
 echo "  ┌────────────────────────────────────┐"

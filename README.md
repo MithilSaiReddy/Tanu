@@ -29,7 +29,7 @@ See [Installation](docs/content/getting-started/installation.md) for prerequisit
 | `bash setup.sh` | One-command dev environment setup |
 | `bash build.sh` | Export Godot desktop binary into `build/` |
 | `python3 main.py desk` | Launch desktop app (spawns server + Godot) |
-| `python3 main.py serve` | Web UI only (http://localhost:7337) |
+| `python3 main.py serve` | Local HTTP/WebSocket API (http://localhost:7337) |
 | `python3 main.py onboard` | First-time LLM configuration |
 | `python3 main.py tanu` | Voice assistant mode |
 | `python3 main.py status` | Show config & status |

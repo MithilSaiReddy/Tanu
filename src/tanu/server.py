@@ -10,7 +10,7 @@ Endpoints
 ─────────
 GET  /                         → API status page
 GET  /api/config               → masked config (for display)
-GET  /api/config/raw           → full config with real keys (populates forms)
+GET  /api/config/raw           → masked config (legacy alias)
 POST /api/config               → deep-merge + save any config fields
 POST /api/config/test-telegram → verify a Telegram bot token live
 POST /api/config/test-llm      → ping LLM provider
@@ -40,6 +40,7 @@ from tanu.config import (
     CONFIG_FILE, PROVIDER_DEFAULTS, get_active_provider,
     load_config, save_config, workspace_path,
 )
+from tanu.security import mask_secrets, origin_is_local, safe_skill_name
 from tanu.session import SessionManager
 
 # ── Gmail auth helpers ──────────────────────────────────────────────
@@ -86,27 +87,7 @@ def _deep_merge(base: dict, override: dict) -> None:
 
 
 def _mask_config(cfg: dict) -> dict:
-    import copy
-    s = copy.deepcopy(cfg)
-    for pname, pcfg in s.get("providers", {}).items():
-        key = pcfg.get("api_key", "")
-        if key and key not in ("ollama", ""):
-            s["providers"][pname]["api_key"] = key[:8] + "…" if len(key) > 8 else "…"
-    tg = s.get("channels", {}).get("telegram", {})
-    if tg.get("token"):
-        t = tg["token"]
-        s["channels"]["telegram"]["token"] = t[:10] + "…" if len(t) > 10 else "…"
-    dc = s.get("channels", {}).get("discord", {})
-    if dc.get("token"):
-        t = dc["token"]
-        s["channels"]["discord"]["token"] = t[:10] + "…" if len(t) > 10 else "…"
-    brave = s.get("tools", {}).get("web", {}).get("search", {}).get("api_key", "")
-    if brave:
-        s["tools"]["web"]["search"]["api_key"] = brave[:6] + "…"
-    notion_key = s.get("tools", {}).get("notion", {}).get("api_key", "")
-    if notion_key:
-        s["tools"]["notion"]["api_key"] = notion_key[:6] + "…"
-    return s
+    return mask_secrets(cfg)
 
 
 def _strip_masked(obj, depth=0):
@@ -169,7 +150,15 @@ async def handle_get_config(request):
 
 
 async def handle_get_config_raw(request):
-    return web.json_response(_cfg)
+    # Never expose stored credentials over HTTP. Kept as a compatibility alias.
+    return web.json_response(_mask_config(_cfg))
+
+
+@web.middleware
+async def local_origin_only(request, handler):
+    if not origin_is_local(request.headers.get("Origin", "")):
+        raise web.HTTPForbidden(text="Remote browser origins are not allowed")
+    return await handler(request)
 
 
 async def handle_get_memory(request):
@@ -353,7 +342,10 @@ async def handle_post_clear(request):
 
 async def handle_post_skill(request):
     body = await request.json()
-    name = (body.get("name") or "").strip().replace(" ", "-").lower()
+    try:
+        name = safe_skill_name(body.get("name"))
+    except ValueError as exc:
+        return web.json_response({"ok": False, "error": str(exc)}, status=400)
     content = (body.get("content") or "").strip()
     if not name:
         return web.json_response({"ok": False, "error": "Skill name is required"}, status=400)
@@ -374,7 +366,10 @@ async def handle_post_skill(request):
 
 async def handle_put_skill(request):
     body = await request.json()
-    name = (body.get("name") or "").strip()
+    try:
+        name = safe_skill_name(body.get("name"))
+    except ValueError as exc:
+        return web.json_response({"ok": False, "error": str(exc)}, status=400)
     content = (body.get("content") or "").strip()
     if not name or not content:
         return web.json_response({"ok": False, "error": "name and content required"}, status=400)
@@ -389,7 +384,10 @@ async def handle_put_skill(request):
 async def handle_delete_skill(request):
     import shutil
     body = await request.json()
-    name = (body.get("name") or "").strip()
+    try:
+        name = safe_skill_name(body.get("name"))
+    except ValueError as exc:
+        return web.json_response({"ok": False, "error": str(exc)}, status=400)
     if not name:
         return web.json_response({"ok": False, "error": "name required"}, status=400)
     ws = workspace_path(_cfg)
@@ -415,7 +413,6 @@ async def handle_post_chat(request):
             "Content-Type": "text/event-stream",
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
-            "Access-Control-Allow-Origin": "*",
         },
     )
     await response.prepare(request)
@@ -607,7 +604,7 @@ async def handle_get_circle_check(request):
 # ── App Setup ───────────────────────────────────────────────────────
 
 def _build_app() -> web.Application:
-    app = web.Application()
+    app = web.Application(middlewares=[local_origin_only], client_max_size=1024**2)
 
     # GET routes
     app.router.add_get("/", handle_index)
