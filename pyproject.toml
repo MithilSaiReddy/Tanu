@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tanu"
-version = "2.1.1"
+version = "2.1.2"
 description = "Local-first desktop AI assistant with tools and voice"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -27,13 +27,13 @@ classifiers = [
 dependencies = [
     "requests",
     "aiohttp",
-    "sounddevice",
-    "piper-tts",
     "psutil>=5.9",
 ]
 
 [project.optional-dependencies]
 voice = [
+    "sounddevice",
+    "piper-tts",
     "webrtcvad",
 ]
 wakeword = [

@@ -1,14 +1,15 @@
-name: Quality checks
+name: Checking branch verification
 
 on:
   push:
-  pull_request:
+    branches: [checking-branch]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  python:
+  source-tests:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -18,9 +19,18 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Compile Python sources
-        run: python -m compileall -q main.py src
-      - name: Run unit tests
-        run: python -m unittest discover -s tests -v
+      - name: Run isolated verification
+        run: python scripts/verify.py
       - name: Validate shell scripts
         run: bash -n setup.sh build.sh scripts/*.sh
+
+  local-api-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -e .
+      - run: python scripts/verify.py --full

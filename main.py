@@ -322,9 +322,15 @@ def main():
     sub = parser.add_subparsers(dest="command")
 
     sub.add_parser("onboard", help="First-time setup")
-    sub.add_parser("serve", help="Local HTTP/WebSocket API")
+    p_serve = sub.add_parser("serve", help="Local HTTP/WebSocket API")
+    p_serve.add_argument(
+        "--port", type=int, default=7337, help="Listen port (default: 7337)"
+    )
     sub.add_parser("status", help="Show status")
-    sub.add_parser("desk", help="Desktop app (Godot + server)")
+    p_desk = sub.add_parser("desk", help="Desktop app (Godot + server)")
+    p_desk.add_argument(
+        "--port", type=int, default=7337, help="Local API port (default: 7337)"
+    )
     sub.add_parser("agent", help="Terminal chat (no audio)")
 
     p_update = sub.add_parser("update", help="Update Tanu from GitHub")

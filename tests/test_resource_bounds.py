@@ -1,3 +1,4 @@
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -30,8 +31,13 @@ class ResourceBoundTests(unittest.TestCase):
 
     def test_shell_capture_is_bounded(self):
         with tempfile.TemporaryDirectory(prefix="tanu-shell-") as tmp:
+            command = subprocess.list2cmdline([
+                sys.executable,
+                "-c",
+                "import sys; sys.stdout.write('x' * 20000)",
+            ])
             output = shell_exec(
-                "yes x | head -c 20000",
+                command,
                 timeout=5,
                 _ctx=context(Path(tmp)),
             )

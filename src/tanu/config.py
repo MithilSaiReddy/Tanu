@@ -8,15 +8,18 @@ Project copy: config/config.json    (repo-root template, created by setup)
 
 import copy
 import json
+import os
 import sys
 from pathlib import Path
 
 # ── Paths ────────────────────────────────────────────────────────────────────
-CONFIG_DIR         = Path.home() / ".tanu"
+CONFIG_DIR         = Path(os.environ.get("TANU_CONFIG_DIR", Path.home() / ".tanu")).expanduser()
 CONFIG_FILE        = CONFIG_DIR / "config.json"
 LEGACY_CONFIG_DIR  = Path.home() / ".bujji"
 LEGACY_CONFIG_FILE = LEGACY_CONFIG_DIR / "config.json"
-WORKSPACE_DEFAULT  = CONFIG_DIR / "workspace"
+WORKSPACE_DEFAULT  = Path(
+    os.environ.get("TANU_WORKSPACE_DIR", CONFIG_DIR / "workspace")
+).expanduser()
 
 
 def get_base_dir() -> Path:
@@ -222,6 +225,9 @@ def get_active_provider(cfg: dict):
 
 def workspace_path(cfg: dict) -> Path:
     """Resolve the configured workspace path (relative → repo root)."""
+    isolated_workspace = os.environ.get("TANU_WORKSPACE_DIR", "").strip()
+    if isolated_workspace:
+        return Path(isolated_workspace).expanduser()
     ws = cfg.get("agents", {}).get("defaults", {}).get("workspace", "")
     if not ws:
         return WORKSPACE_DEFAULT

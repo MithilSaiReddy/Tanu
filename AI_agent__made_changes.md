@@ -63,3 +63,15 @@ disabled by default and sub-agents memory-guarded, and `git diff --check` passed
 - Restored the 8,192-token response budget, 20 tool iterations, 40-message history, and a larger 32,000-character active-skill budget because these remote-LLM/context limits have negligible impact on local RAM.
 - Kept sub-agents available for complex tasks while retaining sequential execution and automatic refusal under memory pressure.
 - Kept the 600/800 MB process-tree controls focused on real local memory consumers: models, processes, sessions, queues, captured tool output, and UI/runtime state.
+
+## Isolated tester environment (2.1.2)
+
+- Added `scripts/verify.py`, a cross-platform, zero-download verification command for syntax, unit tests, and CLI smoke checks.
+- Added `--full` verification for local API endpoints and measured process-tree RAM against the configured 800 MB hard limit.
+- Test runs use `TANU_CONFIG_DIR` and `TANU_WORKSPACE_DIR`, so they never touch a tester's actual configuration or workspace.
+- Added `TESTING.md` with clean-branch, full-server, voice, and cleanup steps.
+- Added GitHub Actions checks scoped to pushes on `checking-branch` only.
+- Fixed the documented `serve --port` and `desk --port` CLI options.
+- Moved audio packages to the `voice` extra so text/server testers do not need to download voice dependencies; the full setup still installs all features.
+- Final verification passed 16 unit tests and 46-file syntax validation; the
+  isolated local API used 55.3 MB in the measured process tree.

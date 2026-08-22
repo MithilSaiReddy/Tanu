@@ -14,8 +14,9 @@ enabled online integrations use the network.
 ## Quick Start
 
 ```bash
-git clone https://github.com/MithilSaiReddy/Tanu
+git clone --branch checking-branch --single-branch https://github.com/MithilSaiReddy/Tanu
 cd Tanu
+python3 scripts/verify.py # zero-download source and unit checks
 bash setup.sh           # installs everything
 bash build.sh           # exports the Godot desktop app
 python3 main.py onboard # configure your LLM provider
@@ -24,6 +25,12 @@ python3 main.py onboard # configure your LLM provider
 Then run `python3 main.py desk` — the server starts and the Godot character window opens.
 
 See [Installation](docs/content/getting-started/installation.md) for prerequisites and manual setup.
+
+Before promoting a build, follow the isolated tester checklist in
+[TESTING.md](TESTING.md). It never reads or writes the tester's real Tanu
+configuration. `python3 scripts/verify.py --full` also boots the local API,
+checks its endpoints and verifies that the test process tree stays below the
+configured 800 MB hard limit.
 
 ---
 
