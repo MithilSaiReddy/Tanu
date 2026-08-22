@@ -103,8 +103,8 @@ class SkillsLoader:
         workspace: Path,
         event_bus: Optional[LocalEventBus] = None,
         max_skills: int = 32,
-        max_skill_chars: int = 4000,
-        max_total_chars: int = 12000,
+        max_skill_chars: int = 8000,
+        max_total_chars: int = 32000,
     ):
         self._skills_dir = workspace / "skills"
         self._event_bus = event_bus
@@ -358,8 +358,8 @@ class AgentLoop:
             workspace_path(cfg),
             event_bus=self.event_bus,
             max_skills=runtime_cfg.get("max_skills", 32),
-            max_skill_chars=runtime_cfg.get("max_skill_chars", 4000),
-            max_total_chars=runtime_cfg.get("max_active_skill_chars", 12000),
+            max_skill_chars=runtime_cfg.get("max_skill_chars", 8000),
+            max_total_chars=runtime_cfg.get("max_active_skill_chars", 32000),
         )
 
         print(

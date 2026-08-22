@@ -54,5 +54,12 @@ Full voice, Godot export, Gmail OAuth, and live LLM calls require their external
 - Added runtime, event-bus, memory-pressure, and voice-buffer unit tests and replaced outdated architecture/data-flow documentation.
 
 Validation after this update: 15 unit tests passed, all 45 Python files parsed,
-shell syntax checks passed, runtime integration passed with network/sub-agent
-tools disabled by default, and `git diff --check` passed.
+shell syntax checks passed, runtime integration passed with network tools
+disabled by default and sub-agents memory-guarded, and `git diff --check` passed.
+
+## Output-quality safeguard
+
+- Bumped the package version to 2.1.1.
+- Restored the 8,192-token response budget, 20 tool iterations, 40-message history, and a larger 32,000-character active-skill budget because these remote-LLM/context limits have negligible impact on local RAM.
+- Kept sub-agents available for complex tasks while retaining sequential execution and automatic refusal under memory pressure.
+- Kept the 600/800 MB process-tree controls focused on real local memory consumers: models, processes, sessions, queues, captured tool output, and UI/runtime state.

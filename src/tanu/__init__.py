@@ -4,7 +4,7 @@ tanu — ultra-lightweight personal AI assistant for DeskBot.
 A calm, sharp, slightly witty personal assistant.
 """
 
-__version__ = "2.1.0"
+__version__ = "2.1.1"
 __author__ = "Mithil Reddy"
 
 LOGO = "🎙️"

@@ -44,12 +44,12 @@ The active configuration is always `~/.tanu/config.json`. Run
   ],
   "runtime": {
     "local_only": true,
-    "allow_subagents": false,
+    "allow_subagents": true,
     "max_skills": 32,
-    "max_active_skill_chars": 12000,
+    "max_active_skill_chars": 32000,
     "max_parallel_tools": 3,
     "max_sessions": 6,
-    "max_history_messages": 24,
+    "max_history_messages": 40,
     "memory": {
       "soft_limit_mb": 600,
       "hard_limit_mb": 800
@@ -108,8 +108,8 @@ cleanup; the 800 MB hard limit refuses new work and safely stops desktop mode.
 
 `local_only` hides web and Gmail tools by default, reducing network exposure and
 the tool schema sent to the LLM. Set it to `false` only when online connectors
-are wanted. Sub-agents are disabled by default because every additional agent
-adds context and connection state; enable them with `allow_subagents`.
+are wanted. Sub-agents remain available for complex work, run sequentially by
+default, and are automatically refused during memory pressure.
 
 Keep the hard limit above the soft limit by at least 32 MB. Speech-model and
 Godot memory varies by platform, so use `GET /api/status` to observe actual RSS.

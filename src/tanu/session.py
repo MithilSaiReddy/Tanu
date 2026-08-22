@@ -50,7 +50,7 @@ class SessionManager:
         self._history: dict[str, list]        = {}
         self._last_used: dict[str, float]      = {}
         runtime_cfg = cfg.get("runtime", {})
-        self.max_history = max(4, min(int(runtime_cfg.get("max_history_messages", 24)), 80))
+        self.max_history = max(4, min(int(runtime_cfg.get("max_history_messages", 40)), 80))
         self.max_sessions = max(1, min(int(runtime_cfg.get("max_sessions", 6)), 32))
         self.idle_seconds = max(60, int(runtime_cfg.get("session_idle_seconds", 1800)))
         self.event_bus, self.memory_budget = runtime_from_config(cfg)

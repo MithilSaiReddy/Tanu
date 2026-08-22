@@ -64,7 +64,7 @@ Important rules:
         cfg=cfg,
         max_iterations=min(
             max_iterations,
-            int(cfg.get("agents", {}).get("defaults", {}).get("subagent_max_iterations", 8)),
+            int(cfg.get("agents", {}).get("defaults", {}).get("subagent_max_iterations", 20)),
         ),
         system_prompt_override=system_prompt,
         event_bus=ctx.event_bus,

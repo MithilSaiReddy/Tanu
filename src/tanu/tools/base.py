@@ -435,7 +435,7 @@ class ToolRegistry:
                 "gmail_send",
                 "web_search",
             }
-        if not runtime_cfg.get("allow_subagents", False):
+        if not runtime_cfg.get("allow_subagents", True):
             names -= {"spawn_subagent", "agent_pipeline"}
         return names
 
