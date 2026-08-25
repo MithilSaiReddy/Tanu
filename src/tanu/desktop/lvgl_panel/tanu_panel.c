@@ -133,34 +133,50 @@ static int json_get_string(const char *json, const char *key,
  * ------------------------------------------------------------------------- */
 
 static void create_ui(void) {
+    printf("[UI] create_ui start\n"); fflush(stdout);
+
     scr = lv_screen_active();
     lv_obj_set_style_bg_color(scr, BG_COLOR, 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
+    printf("[UI] screen bg set\n"); fflush(stdout);
 
-    int scr_w = lv_display_get_horizontal_resolution(NULL);
+    int scr_w = 320; /* hardcoded for 320x240 ILI9341 */
     int pad = 4;
 
     /* Status bar — created first so it always renders */
+    printf("[UI] creating status_label...\n"); fflush(stdout);
     status_label = lv_label_create(scr);
     lv_label_set_text(status_label, "Connecting...");
     lv_obj_set_style_text_color(status_label, lv_color_hex(0xaaaaaa), 0);
     lv_obj_set_style_text_font(status_label, &lv_font_montserrat_14, 0);
     lv_obj_align(status_label, LV_ALIGN_TOP_LEFT, pad, pad);
+    printf("[UI] status_label OK\n"); fflush(stdout);
 
     /* Response ticker — created second so it always renders */
+    printf("[UI] creating response_label...\n"); fflush(stdout);
     response_label = lv_label_create(scr);
-    lv_label_set_text(response_label, "");
+    lv_label_set_text(response_label, "Tanu");
     lv_label_set_long_mode(response_label, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(response_label, scr_w - pad * 2);
     lv_obj_set_style_text_color(response_label, lv_color_hex(0xdddddd), 0);
     lv_obj_set_style_text_font(response_label, &lv_font_montserrat_14, 0);
     lv_obj_align(response_label, LV_ALIGN_BOTTOM_LEFT, pad, -pad);
+    printf("[UI] response_label OK\n"); fflush(stdout);
 
     /* Character GIF — created last so labels always work even if GIF fails */
+    printf("[UI] creating lv_gif...\n"); fflush(stdout);
     face_gif = lv_gif_create(scr);
-    lv_gif_set_color_format(face_gif, LV_COLOR_FORMAT_ARGB8888);
-    lv_gif_set_src(face_gif, &gif_character);
-    lv_obj_align(face_gif, LV_ALIGN_TOP_MID, 0, STATUS_BAR_H + pad * 2);
+    if (!face_gif) {
+        printf("[UI] ERROR: lv_gif_create() returned NULL\n"); fflush(stdout);
+    } else {
+        printf("[UI] lv_gif_create OK, setting color format...\n"); fflush(stdout);
+        lv_gif_set_color_format(face_gif, LV_COLOR_FORMAT_ARGB8888);
+        printf("[UI] color format set, setting src...\n"); fflush(stdout);
+        lv_gif_set_src(face_gif, &gif_character);
+        printf("[UI] lv_gif_set_src OK\n"); fflush(stdout);
+        lv_obj_align(face_gif, LV_ALIGN_TOP_MID, 0, STATUS_BAR_H + pad * 2);
+    }
+    printf("[UI] create_ui done\n"); fflush(stdout);
 }
 
 /* ---------------------------------------------------------------------------
@@ -420,21 +436,26 @@ int main(int argc, char **argv) {
     signal(SIGTERM, sighandler);
 
     /* Initialize LVGL */
+    printf("[MAIN] lv_init...\n"); fflush(stdout);
     lv_init();
 
     /* Create fbdev display */
+    printf("[MAIN] creating fbdev display...\n"); fflush(stdout);
     lv_display_t *disp = lv_linux_fbdev_create();
     if (!disp) {
         fprintf(stderr, "Failed to create LVGL fbdev display\n");
         return 1;
     }
     lv_linux_fbdev_set_file(disp, "/dev/fb0");
+    printf("[MAIN] fbdev display ready\n"); fflush(stdout);
 
     /* Create UI */
     create_ui();
 
     /* Update timer — polls state and refreshes labels at 20 Hz */
+    printf("[MAIN] creating timer...\n"); fflush(stdout);
     update_timer = lv_timer_create(update_timer_cb, ANIM_TICK_MS, NULL);
+    printf("[MAIN] timer OK\n"); fflush(stdout);
 
     /* Initialize libwebsockets */
     struct lws_context_creation_info lws_info;
