@@ -1,10 +1,11 @@
 /*
  * tanu_panel.c — LVGL panel client for Tanu AI assistant.
  *
- * Renders Tanu's face, status bar, and response ticker directly to a Linux
- * framebuffer (/dev/fb0) via LVGL's fbdev driver. Connects to the Tanu
- * aiohttp WebSocket server to receive state updates and response tokens.
+ * Displays a character GIF, status bar, and response ticker directly to a
+ * Linux framebuffer (/dev/fb0) via LVGL's fbdev driver. Connects to the
+ * Tanu aiohttp WebSocket server to receive state updates and response tokens.
  *
+ * Character GIF: /opt/tanu/assets/character.gif
  * Build: gcc -O2 -o tanu_panel tanu_panel.c -llvgl_linux -llvgl -lwebsockets -lm -lpthread
  * Usage: tanu_panel --ws-url ws://localhost:7337/ws/chat
  */
@@ -12,7 +13,6 @@
 #include <getopt.h>
 #include <libwebsockets.h>
 #include <lvgl.h>
-#include <math.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,23 +24,14 @@
  * Configuration
  * ------------------------------------------------------------------------- */
 
-#define FACE_RADIUS      60
 #define STATUS_BAR_H     18
 #define RESPONSE_LINES   3
 #define RESPONSE_BUF_SZ  4096
 #define WS_RX_BUF_SZ     2048
-#define MSG_JSON_SZ      2048
-#define ANIM_TICK_MS     16  /* ~60 fps animation */
-#define WS_POLL_MS       50  /* 20 Hz WebSocket poll */
+#define ANIM_TICK_MS     50  /* 20 fps — GIF handles its own frame timing */
 
 #define BG_COLOR         lv_color_hex(0x14141f)
-
-/* State accent colors (matching character.py) */
-#define COLOR_IDLE       lv_color_hex(0x00d4ff)
-#define COLOR_LISTENING  lv_color_hex(0x00ff88)
-#define COLOR_THINKING   lv_color_hex(0xffaa00)
-#define COLOR_SPEAKING   lv_color_hex(0xff00ff)
-#define COLOR_ERROR      lv_color_hex(0xff4444)
+#define CHAR_GIF_PATH    "S:character.gif"
 
 /* ---------------------------------------------------------------------------
  * Globals
@@ -63,8 +54,7 @@ typedef struct {
     int connected;
     char response[RESPONSE_BUF_SZ];
     char status[128];
-    float anim_t;          /* animation time in seconds */
-    int dirty;             /* 1 if UI needs redraw */
+    int dirty;
 } panel_state_t;
 
 static panel_state_t g_state = {
@@ -72,27 +62,19 @@ static panel_state_t g_state = {
     .connected = 0,
     .response  = "Waiting for server...",
     .status    = "Connecting...",
-    .anim_t    = 0.0f,
     .dirty     = 1,
 };
 
 /* LVGL widgets */
 static lv_obj_t *scr;
-static lv_obj_t *face_canvas;
+static lv_obj_t *face_gif;
 static lv_obj_t *status_label;
 static lv_obj_t *response_label;
-
-/* Canvas dimensions (set in create_ui) */
-static int g_canvas_w, g_canvas_h;
 
 /* WebSocket context */
 static struct lws_context *lws_ctx;
 static struct lws *lws_wsi;
 static char g_ws_url[256] = "ws://127.0.0.1:7337/ws/chat";
-
-/* Canvas buffer for face drawing */
-static lv_layer_t face_layer;
-static lv_color_t face_buf[FACE_RADIUS * 2 * FACE_RADIUS * 2];
 
 /* Signal handling */
 static volatile int g_running = 1;
@@ -106,17 +88,6 @@ static void sighandler(int sig) {
  * State helpers
  * ------------------------------------------------------------------------- */
 
-static lv_color_t get_state_color(tanu_state_t s) {
-    switch (s) {
-        case STATE_IDLE:      return COLOR_IDLE;
-        case STATE_LISTENING: return COLOR_LISTENING;
-        case STATE_THINKING:  return COLOR_THINKING;
-        case STATE_SPEAKING:  return COLOR_SPEAKING;
-        case STATE_ERROR:     return COLOR_ERROR;
-        default:              return COLOR_IDLE;
-    }
-}
-
 static tanu_state_t parse_state(const char *name) {
     for (int i = 0; i < (int)(sizeof(state_names) / sizeof(state_names[0])); i++) {
         if (strcmp(name, state_names[i]) == 0)
@@ -125,9 +96,7 @@ static tanu_state_t parse_state(const char *name) {
     return STATE_IDLE;
 }
 
-/* Simple JSON value extractor for flat key:value pairs.
- * Writes the value string into `out` (max `out_sz` bytes).
- * Returns 0 on success, -1 if key not found. */
+/* Simple JSON value extractor for flat key:value pairs. */
 static int json_get_string(const char *json, const char *key,
                            char *out, size_t out_sz) {
     char needle[128];
@@ -148,7 +117,6 @@ static int json_get_string(const char *json, const char *key,
         out[len] = '\0';
         return 0;
     }
-    /* Numeric / boolean / null value */
     const char *start = p;
     while (*p && *p != ',' && *p != '}' && *p != '\n') p++;
     size_t len = (size_t)(p - start);
@@ -156,177 +124,6 @@ static int json_get_string(const char *json, const char *key,
     memcpy(out, start, len);
     out[len] = '\0';
     return 0;
-}
-
-/* ---------------------------------------------------------------------------
- * Face drawing (LVGL canvas)
- * --------------------------------------------------------------------- */
-
-static void draw_face_idle(int cx, int cy, lv_color_t color) {
-    /* Center dot with breathing effect */
-    float breathe = 4.0f + 3.0f * sinf(g_state.anim_t * 1.5f);
-    lv_draw_arc_dsc_t arc_dsc;
-    lv_draw_arc_dsc_init(&arc_dsc);
-    arc_dsc.color = color;
-    arc_dsc.width = 2;
-    arc_dsc.start_angle = 0;
-    arc_dsc.end_angle = 360;
-    arc_dsc.center.x = cx;
-    arc_dsc.center.y = cy;
-    arc_dsc.radius = (uint16_t)(int)breathe;
-    lv_draw_arc(&face_layer, &arc_dsc);
-
-    /* Orbiting particles */
-    for (int i = 0; i < 3; i++) {
-        float angle = g_state.anim_t * 0.5f + i * 2.0943951f; /* TAU/3 */
-        float r = FACE_RADIUS * 0.6f;
-        int px = cx + (int)(cosf(angle) * r);
-        int py = cy + (int)(sinf(angle) * r);
-        lv_area_t pa = {(lv_coord_t)(px - 2), (lv_coord_t)(py - 2),
-                        (lv_coord_t)(px + 2), (lv_coord_t)(py + 2)};
-        lv_draw_rect_dsc_t rect_dsc;
-        lv_draw_rect_dsc_init(&rect_dsc);
-        rect_dsc.bg_color = color;
-        rect_dsc.bg_opa = LV_OPA_COVER;
-        lv_draw_rect(&face_layer, &rect_dsc, &pa);
-    }
-}
-
-static void draw_face_listening(int cx, int cy, lv_color_t color) {
-    /* Concentric rings */
-    for (int i = 0; i < 3; i++) {
-        int ring_r = (int)(FACE_RADIUS * 0.4f) + i * 12;
-        float pulse = sinf(g_state.anim_t * 4.0f + i) * 5.0f;
-        ring_r += (int)pulse;
-        if (ring_r < 2) ring_r = 2;
-        lv_draw_arc_dsc_t arc;
-        lv_draw_arc_dsc_init(&arc);
-        arc.color = color;
-        arc.width = 2;
-        arc.start_angle = 0;
-        arc.end_angle = 360;
-        arc.center.x = cx;
-        arc.center.y = cy;
-        arc.radius = (uint16_t)ring_r;
-        lv_draw_arc(&face_layer, &arc);
-    }
-    /* Center dot */
-    lv_area_t ca = {(lv_coord_t)(cx - 6), (lv_coord_t)(cy - 6),
-                    (lv_coord_t)(cx + 6), (lv_coord_t)(cy + 6)};
-    lv_draw_rect_dsc_t rect_dsc;
-    lv_draw_rect_dsc_init(&rect_dsc);
-    rect_dsc.bg_color = color;
-    rect_dsc.bg_opa = LV_OPA_COVER;
-    lv_draw_rect(&face_layer, &rect_dsc, &ca);
-}
-
-static void draw_face_thinking(int cx, int cy, lv_color_t color) {
-    /* Orbiting dots */
-    for (int i = 0; i < 5; i++) {
-        float angle = g_state.anim_t * 3.0f + i * 1.256637f; /* TAU/5 */
-        float r = FACE_RADIUS * 0.5f;
-        int px = cx + (int)(cosf(angle) * r);
-        int py = cy + (int)(sinf(angle) * r);
-        int ds = 3 + (int)(sinf(g_state.anim_t * 5.0f + i) * 1.5f);
-        if (ds < 1) ds = 1;
-        lv_area_t a = {(lv_coord_t)(px - ds), (lv_coord_t)(py - ds),
-                       (lv_coord_t)(px + ds), (lv_coord_t)(py + ds)};
-        lv_draw_rect_dsc_t rect_dsc;
-        lv_draw_rect_dsc_init(&rect_dsc);
-        rect_dsc.bg_color = color;
-        rect_dsc.bg_opa = LV_OPA_COVER;
-        lv_draw_rect(&face_layer, &rect_dsc, &a);
-    }
-    /* Pulsing center */
-    int cs = 5 + (int)(sinf(g_state.anim_t * 4.0f) * 3.0f);
-    lv_area_t ca = {(lv_coord_t)(cx - cs), (lv_coord_t)(cy - cs),
-                    (lv_coord_t)(cx + cs), (lv_coord_t)(cy + cs)};
-    lv_draw_rect_dsc_t rect_dsc;
-    lv_draw_rect_dsc_init(&rect_dsc);
-    rect_dsc.bg_color = color;
-    rect_dsc.bg_opa = LV_OPA_COVER;
-    lv_draw_rect(&face_layer, &rect_dsc, &ca);
-}
-
-static void draw_face_speaking(int cx, int cy, lv_color_t color) {
-    int bar_count = 8;
-    int bar_w = 5;
-    int max_h = (int)(FACE_RADIUS * 0.6f);
-
-    for (int i = 0; i < bar_count; i++) {
-        float angle = (i - bar_count / 2.0f) * 0.2f;
-        int x = cx + (int)(angle * (FACE_RADIUS * 0.8f));
-        int h = (int)(max_h * (0.3f + 0.7f * fabsf(sinf(g_state.anim_t * 8.0f + i * 0.7f))));
-        if (h < 2) h = 2;
-        lv_area_t a = {(lv_coord_t)(x - bar_w / 2), (lv_coord_t)(cy - h / 2),
-                       (lv_coord_t)(x + bar_w / 2), (lv_coord_t)(cy + h / 2)};
-        lv_draw_rect_dsc_t rect_dsc;
-        lv_draw_rect_dsc_init(&rect_dsc);
-        rect_dsc.bg_color = color;
-        rect_dsc.bg_opa = LV_OPA_COVER;
-        lv_draw_rect(&face_layer, &rect_dsc, &a);
-    }
-}
-
-static void draw_face_error(int cx, int cy, lv_color_t color) {
-    if (sinf(g_state.anim_t * 6.0f) <= 0) return;
-    int s = 12;
-    int w = 3;
-
-    lv_draw_line_dsc_t line;
-    lv_draw_line_dsc_init(&line);
-    line.color = color;
-    line.width = w;
-    line.p1.x = cx - s;
-    line.p1.y = cy - s;
-    line.p2.x = cx + s;
-    line.p2.y = cy + s;
-    lv_draw_line(&face_layer, &line);
-
-    line.p1.x = cx + s;
-    line.p1.y = cy - s;
-    line.p2.x = cx - s;
-    line.p2.y = cy + s;
-    lv_draw_line(&face_layer, &line);
-}
-
-static void draw_face(void) {
-    lv_canvas_fill_bg(face_canvas, BG_COLOR, LV_OPA_COVER);
-    lv_canvas_init_layer(face_canvas, &face_layer);
-
-    int cx = g_canvas_w / 2;
-    int cy = g_canvas_h / 2;
-    lv_color_t color = get_state_color(g_state.state);
-
-    /* Outer glow */
-    lv_draw_rect_dsc_t glow_dsc;
-    lv_draw_rect_dsc_init(&glow_dsc);
-    glow_dsc.bg_color = color;
-    glow_dsc.bg_opa = LV_OPA_20;
-    int glow_r = FACE_RADIUS + 15;
-    lv_area_t ga = {(lv_coord_t)(cx - glow_r), (lv_coord_t)(cy - glow_r),
-                    (lv_coord_t)(cx + glow_r), (lv_coord_t)(cy + glow_r)};
-    lv_draw_rect(&face_layer, &glow_dsc, &ga);
-
-    /* Face circle */
-    lv_draw_rect_dsc_t face_dsc;
-    lv_draw_rect_dsc_init(&face_dsc);
-    face_dsc.bg_color = lv_color_hex(0x1a1a2e);
-    face_dsc.bg_opa = LV_OPA_COVER;
-    lv_area_t fa = {(lv_coord_t)(cx - FACE_RADIUS), (lv_coord_t)(cy - FACE_RADIUS),
-                    (lv_coord_t)(cx + FACE_RADIUS), (lv_coord_t)(cy + FACE_RADIUS)};
-    lv_draw_rect(&face_layer, &face_dsc, &fa);
-
-    /* State-specific animation */
-    switch (g_state.state) {
-        case STATE_IDLE:      draw_face_idle(cx, cy, color); break;
-        case STATE_LISTENING: draw_face_listening(cx, cy, color); break;
-        case STATE_THINKING:  draw_face_thinking(cx, cy, color); break;
-        case STATE_SPEAKING:  draw_face_speaking(cx, cy, color); break;
-        case STATE_ERROR:     draw_face_error(cx, cy, color); break;
-    }
-
-    lv_canvas_finish_layer(face_canvas, &face_layer);
 }
 
 /* ---------------------------------------------------------------------------
@@ -349,20 +146,30 @@ static void create_ui(void) {
     lv_obj_set_style_text_font(status_label, &lv_font_montserrat_14, 0);
     lv_obj_align(status_label, LV_ALIGN_TOP_LEFT, pad, pad);
 
-    /* Face canvas — centered vertically between status bar and response area */
+    /* Character GIF — fills the middle area */
     int face_area_top = STATUS_BAR_H + pad * 2;
     int resp_area_h = RESPONSE_LINES * 22 + pad * 2;
-    int face_area_h = scr_h - face_area_top - resp_area_h - pad;
-    int face_size = (face_area_h < scr_w - pad * 2) ? face_area_h : scr_w - pad * 2;
-    if (face_size < 40) face_size = 40;
 
-    g_canvas_w = face_size;
-    g_canvas_h = face_size;
+    face_gif = lv_gif_create(scr);
+    lv_gif_set_color_format(face_gif, LV_COLOR_FORMAT_ARGB8888);
+    lv_gif_set_src(face_gif, CHAR_GIF_PATH);
+    lv_obj_align(face_gif, LV_ALIGN_TOP_MID, 0, face_area_top);
 
-    face_canvas = lv_canvas_create(scr);
-    lv_canvas_set_buffer(face_canvas, face_buf, face_size, face_size,
-                         LV_COLOR_FORMAT_RGB565);
-    lv_obj_align(face_canvas, LV_ALIGN_TOP_MID, 0, face_area_top + (face_area_h - face_size) / 2);
+    /* Scale GIF to fit available height while maintaining aspect ratio */
+    int avail_h = scr_h - face_area_top - resp_area_h - pad;
+    int gif_h = lv_obj_get_height(face_gif);
+    int gif_w = lv_obj_get_width(face_gif);
+    if (gif_h > 0 && gif_h > avail_h) {
+        int scale = (avail_h * 256) / gif_h;
+        lv_image_set_scale(face_gif, scale);
+        /* Recalculate width after scale */
+        gif_w = (gif_w * scale) / 256;
+    }
+    /* Ensure it doesn't exceed screen width */
+    if (gif_w > scr_w - pad * 2) {
+        int scale = ((scr_w - pad * 2) * 256) / lv_obj_get_width(face_gif);
+        lv_image_set_scale(face_gif, scale);
+    }
 
     /* Response ticker at bottom */
     response_label = lv_label_create(scr);
@@ -375,18 +182,15 @@ static void create_ui(void) {
 }
 
 /* ---------------------------------------------------------------------------
- * UI update (called from animation timer)
+ * UI update (called from timer)
  * ------------------------------------------------------------------------- */
 
 static void update_ui(void) {
     lv_label_set_text(status_label, g_state.status);
 
-    /* Truncate response to fit */
     char display_resp[RESPONSE_BUF_SZ];
     snprintf(display_resp, sizeof(display_resp), "%s", g_state.response);
     lv_label_set_text(response_label, display_resp);
-
-    draw_face();
 }
 
 /* ---------------------------------------------------------------------------
@@ -411,7 +215,6 @@ static int ws_callback(struct lws *wsi, enum lws_callback_reasons reason,
         break;
 
     case LWS_CALLBACK_CLIENT_RECEIVE: {
-        /* Assemble message (handle partials) */
         if (ud->len + len > WS_RX_BUF_SZ) ud->len = 0;
         memcpy(ud->buf + LWS_PRE + ud->len, in, len);
         ud->len += len;
@@ -427,7 +230,6 @@ static int ws_callback(struct lws *wsi, enum lws_callback_reasons reason,
                 json_get_string(json, "content", content, sizeof(content));
                 size_t curlen = strlen(g_state.response);
                 if (curlen < RESPONSE_BUF_SZ - 2) {
-                    /* If response was a status message, clear it first */
                     if (g_state.state == STATE_IDLE ||
                         g_state.state == STATE_THINKING) {
                         g_state.response[0] = '\0';
@@ -546,18 +348,16 @@ static const struct lws_protocols ws_protocols[] = {
 };
 
 static void ws_connect(void) {
-    if (lws_wsi) return;  /* already connected */
+    if (lws_wsi) return;
 
     struct lws_client_connect_info info;
     memset(&info, 0, sizeof(info));
 
-    /* Parse URL */
     const char *url = g_ws_url;
     const char *host = "127.0.0.1";
     int port = 7337;
     const char *path = "/ws/chat";
 
-    /* Simple parse: ws://host:port/path */
     if (strncmp(url, "ws://", 5) == 0) {
         url += 5;
     }
@@ -570,7 +370,6 @@ static void ws_connect(void) {
         hostbuf[hlen] = '\0';
         host = hostbuf;
         path = slash;
-        /* Extract port from hostbuf */
         char *colon = strchr(hostbuf, ':');
         if (colon) {
             *colon = '\0';
@@ -591,18 +390,17 @@ static void ws_connect(void) {
 }
 
 /* ---------------------------------------------------------------------------
- * Animation timer callback
+ * Timer callback
  * ------------------------------------------------------------------------- */
 
-static lv_timer_t *anim_timer;
+static lv_timer_t *update_timer;
 
-static void anim_timer_cb(lv_timer_t *timer) {
+static void update_timer_cb(lv_timer_t *timer) {
     (void)timer;
-    float dt = ANIM_TICK_MS / 1000.0f;
-    g_state.anim_t += dt;
-    g_state.dirty = 1;
-    update_ui();
-    lv_obj_invalidate(scr);
+    if (g_state.dirty) {
+        update_ui();
+        g_state.dirty = 0;
+    }
 }
 
 /* ---------------------------------------------------------------------------
@@ -613,22 +411,27 @@ static void print_usage(const char *prog) {
     fprintf(stderr,
         "Usage: %s [OPTIONS]\n"
         "  --ws-url URL    WebSocket server URL (default: ws://127.0.0.1:7337/ws/chat)\n"
+        "  --gif  PATH     Character GIF path (default: " CHAR_GIF_PATH ")\n"
         "  --help          Show this help\n",
         prog);
 }
 
 int main(int argc, char **argv) {
-    /* Parse arguments */
     static struct option long_opts[] = {
         {"ws-url", required_argument, NULL, 'w'},
+        {"gif",    required_argument, NULL, 'g'},
         {"help",   no_argument,       NULL, 'h'},
         {NULL,     0,                 NULL, 0},
     };
     int opt;
-    while ((opt = getopt_long(argc, argv, "w:h", long_opts, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "w:g:h", long_opts, NULL)) != -1) {
         switch (opt) {
         case 'w':
             strncpy(g_ws_url, optarg, sizeof(g_ws_url) - 1);
+            break;
+        case 'g':
+            /* Could override CHAR_GIF_PATH — for now just validate */
+            printf("GIF path: %s\n", optarg);
             break;
         case 'h':
             print_usage(argv[0]);
@@ -639,7 +442,6 @@ int main(int argc, char **argv) {
         }
     }
 
-    /* Signal handlers */
     signal(SIGINT, sighandler);
     signal(SIGTERM, sighandler);
 
@@ -657,8 +459,8 @@ int main(int argc, char **argv) {
     /* Create UI */
     create_ui();
 
-    /* Animation timer (~60 fps) */
-    anim_timer = lv_timer_create(anim_timer_cb, ANIM_TICK_MS, NULL);
+    /* Update timer — polls state and refreshes labels at 20 Hz */
+    update_timer = lv_timer_create(update_timer_cb, ANIM_TICK_MS, NULL);
 
     /* Initialize libwebsockets */
     struct lws_context_creation_info lws_info;
@@ -675,30 +477,26 @@ int main(int argc, char **argv) {
 
     printf("Tanu LVGL panel starting...\n");
     printf("  WS URL: %s\n", g_ws_url);
+    printf("  GIF:    %s\n", CHAR_GIF_PATH);
     printf("  Device: /dev/fb0\n");
 
-    /* Initial draw */
+    /* Initial label update */
     update_ui();
-    lv_obj_invalidate(scr);
 
     /* Main event loop */
     unsigned long last_ws_attempt = 0;
     while (g_running) {
         unsigned long now_ms = (unsigned long)(time(NULL)) * 1000;
 
-        /* Try to reconnect WS if not connected */
         if (!lws_wsi && (now_ms - last_ws_attempt > 3000)) {
             ws_connect();
             last_ws_attempt = now_ms;
         }
 
-        /* Service libwebsockets (non-blocking) */
         lws_service(lws_ctx, 0);
-
-        /* Service LVGL */
         lv_timer_handler();
 
-        usleep(1000);  /* 1ms sleep to avoid busy-wait */
+        usleep(1000);
     }
 
     printf("Tanu LVGL panel shutting down.\n");
