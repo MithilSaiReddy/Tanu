@@ -13,20 +13,21 @@
 #
 # This script:
 #   1. Clones lv_port_linux (if not already present)
-#   2. Builds LVGL with fbdev support (no SDL/Wayland/X11)
-#   3. Builds tanu_panel
+#   2. Builds LVGL with fbdev support (Kconfig-based, no SDL/Wayland/X11)
+#   3. Installs LVGL headers and libraries to /usr/local
+#   4. Compiles tanu_panel with gcc and installs to /usr/local/bin
 
 set -euo pipefail
 
 WORK_DIR="${WORK_DIR:-/opt/tanu}"
 LVGL_DIR="${WORK_DIR}/lv_port_linux"
 PANEL_DIR="$(cd "$(dirname "$0")" && pwd)"
-BUILD_DIR="${PANEL_DIR}/build"
+SRC_FILE="${PANEL_DIR}/src/tanu/desktop/lvgl_panel/tanu_panel.c"
 
 echo "=== Tanu LVGL Panel Build ==="
 echo "  Work dir:   ${WORK_DIR}"
 echo "  LVGL dir:   ${LVGL_DIR}"
-echo "  Panel dir:  ${PANEL_DIR}"
+echo "  Panel src:  ${SRC_FILE}"
 
 # ── Step 1: Clone lv_port_linux if needed ──────────────────────────────────
 if [ ! -d "${LVGL_DIR}" ]; then
@@ -37,14 +38,17 @@ if [ ! -d "${LVGL_DIR}" ]; then
     git clone --recurse-submodules https://github.com/lvgl/lv_port_linux.git
 fi
 
-# ── Step 2: Build LVGL with fbdev config ──────────────────────────────────
+# ── Step 2: Configure and build LVGL with Kconfig ─────────────────────────
 echo ""
-echo "--- Configuring LVGL (fbdev, no SDL/Wayland/X11) ---"
+echo "--- Configuring LVGL (Kconfig, fbdev only) ---"
 cd "${LVGL_DIR}"
 
-# Create or update .config for fbdev-only build
+# Set Kconfig options via environment for non-interactive defconfig
+export KCONFIG_CONFIG=".config"
+export KCONFIG_CONFIG_FILE=".config"
+
+# Create minimal .config with our options
 cat > .config << 'EOF'
-# LVGL config for Tanu panel (fbdev only)
 CONFIG_LV_USE_LINUX_FBDEV=y
 CONFIG_LV_USE_SDL=n
 CONFIG_LV_USE_WAYLAND=n
@@ -63,43 +67,58 @@ CONFIG_LV_USE_DEMO_BENCHMARK=n
 CONFIG_LV_USE_DEMO_MUSIC=n
 EOF
 
-# Apply the config
+# Run defconfig to expand Kconfig defaults
 if command -v defconfig &>/dev/null; then
     defconfig .config 2>/dev/null || true
 fi
 
-echo "Building LVGL..."
+echo "Building LVGL core + fbdev backend..."
 if command -v ninja &>/dev/null; then
-    cmake -B build -GNinja -DCMAKE_BUILD_TYPE=Release 2>&1 | tail -5
-    cmake --build build -j"$(nproc)" 2>&1 | tail -5
+    cmake -B build -GNinja -DCMAKE_BUILD_TYPE=Release -DLV_BUILD_USE_KCONFIG=ON 2>&1 | tail -5
+    cmake --build build --target lvgl_linux -j"$(nproc)" 2>&1 | tail -10
 else
-    cmake -B build -DCMAKE_BUILD_TYPE=Release 2>&1 | tail -5
-    cmake --build build -j"$(nproc)" 2>&1 | tail -5
+    cmake -B build -DCMAKE_BUILD_TYPE=Release -DLV_BUILD_USE_KCONFIG=ON 2>&1 | tail -5
+    cmake --build build --target lvgl_linux -j"$(nproc)" 2>&1 | tail -10
 fi
 
 echo "LVGL build done."
 
-# ── Step 3: Build tanu_panel ──────────────────────────────────────────────
+# ── Step 3: Install LVGL headers and libraries ────────────────────────────
 echo ""
-echo "--- Building tanu_panel ---"
-mkdir -p "${BUILD_DIR}"
-cd "${BUILD_DIR}"
+echo "--- Installing LVGL to /usr/local ---"
+sudo cmake --install ./build 2>&1 | tail -10
 
-cmake "${PANEL_DIR}" \
-    -DLVGL_DIR="${LVGL_DIR}" \
-    -DCMAKE_BUILD_TYPE=Release \
-    2>&1 | tail -10
+echo "LVGL install done."
 
-cmake --build . -j"$(nproc)" 2>&1 | tail -10
-
-# ── Step 4: Install ──────────────────────────────────────────────────────
+# ── Step 4: Compile tanu_panel with gcc ───────────────────────────────────
 echo ""
-echo "--- Installing tanu_panel ---"
-sudo cmake --install . 2>&1 | tail -5
+echo "--- Compiling tanu_panel ---"
+
+if [ ! -f "${SRC_FILE}" ]; then
+    echo "ERROR: Source file not found: ${SRC_FILE}"
+    exit 1
+fi
+
+gcc -O2 -o /tmp/tanu_panel "${SRC_FILE}" \
+    -I/usr/local/include/lvgl \
+    -I/usr/local/include/lvgl/config \
+    -I/usr/local/include/lvgl_private \
+    -L/usr/local/lib \
+    -llvgl_linux -llvgl \
+    -lwebsockets -lm -lpthread \
+    2>&1
+
+echo "Compilation done."
+
+# ── Step 5: Install binary ────────────────────────────────────────────────
+echo ""
+echo "--- Installing tanu_panel to /usr/local/bin ---"
+sudo cp /tmp/tanu_panel /usr/local/bin/tanu_panel
+sudo chmod +x /usr/local/bin/tanu_panel
 
 echo ""
 echo "=== Build complete ==="
-echo "  Binary: $(which tanu_panel 2>/dev/null || echo ${BUILD_DIR}/tanu_panel)"
+echo "  Binary: /usr/local/bin/tanu_panel"
 echo ""
 echo "Run with:"
 echo "  LV_LINUX_FBDEV_DEVICE=/dev/fb0 tanu_panel --ws-url ws://127.0.0.1:7337/ws/chat"

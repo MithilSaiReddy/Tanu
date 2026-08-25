@@ -5,13 +5,14 @@
  * framebuffer (/dev/fb0) via LVGL's fbdev driver. Connects to the Tanu
  * aiohttp WebSocket server to receive state updates and response tokens.
  *
- * Build: see CMakeLists.txt in this directory.
+ * Build: gcc -O2 -o tanu_panel tanu_panel.c -llvgl_linux -llvgl -lwebsockets -lm -lpthread
  * Usage: tanu_panel --ws-url ws://localhost:7337/ws/chat
  */
 
 #include <getopt.h>
 #include <libwebsockets.h>
 #include <lvgl.h>
+#include <math.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -80,6 +81,9 @@ static lv_obj_t *scr;
 static lv_obj_t *face_canvas;
 static lv_obj_t *status_label;
 static lv_obj_t *response_label;
+
+/* Canvas dimensions (set in create_ui) */
+static int g_canvas_w, g_canvas_h;
 
 /* WebSocket context */
 static struct lws_context *lws_ctx;
@@ -167,9 +171,10 @@ static void draw_face_idle(int cx, int cy, lv_color_t color) {
     arc_dsc.width = 2;
     arc_dsc.start_angle = 0;
     arc_dsc.end_angle = 360;
-    lv_area_t area = {(lv_coord_t)(cx - (int)breathe), (lv_coord_t)(cy - (int)breathe),
-                      (lv_coord_t)(cx + (int)breathe), (lv_coord_t)(cy + (int)breathe)};
-    lv_draw_arc(&face_layer, &arc_dsc, &area);
+    arc_dsc.center.x = cx;
+    arc_dsc.center.y = cy;
+    arc_dsc.radius = (uint16_t)(int)breathe;
+    lv_draw_arc(&face_layer, &arc_dsc);
 
     /* Orbiting particles */
     for (int i = 0; i < 3; i++) {
@@ -179,10 +184,11 @@ static void draw_face_idle(int cx, int cy, lv_color_t color) {
         int py = cy + (int)(sinf(angle) * r);
         lv_area_t pa = {(lv_coord_t)(px - 2), (lv_coord_t)(py - 2),
                         (lv_coord_t)(px + 2), (lv_coord_t)(py + 2)};
-        lv_draw_fill_dsc_t fill;
-        lv_draw_fill_dsc_init(&fill);
-        fill.color = color;
-        lv_draw_rect(&face_layer, &fill, &pa);
+        lv_draw_rect_dsc_t rect_dsc;
+        lv_draw_rect_dsc_init(&rect_dsc);
+        rect_dsc.bg_color = color;
+        rect_dsc.bg_opa = LV_OPA_COVER;
+        lv_draw_rect(&face_layer, &rect_dsc, &pa);
     }
 }
 
@@ -199,17 +205,19 @@ static void draw_face_listening(int cx, int cy, lv_color_t color) {
         arc.width = 2;
         arc.start_angle = 0;
         arc.end_angle = 360;
-        lv_area_t a = {(lv_coord_t)(cx - ring_r), (lv_coord_t)(cy - ring_r),
-                       (lv_coord_t)(cx + ring_r), (lv_coord_t)(cy + ring_r)};
-        lv_draw_arc(&face_layer, &arc, &a);
+        arc.center.x = cx;
+        arc.center.y = cy;
+        arc.radius = (uint16_t)ring_r;
+        lv_draw_arc(&face_layer, &arc);
     }
     /* Center dot */
     lv_area_t ca = {(lv_coord_t)(cx - 6), (lv_coord_t)(cy - 6),
                     (lv_coord_t)(cx + 6), (lv_coord_t)(cy + 6)};
-    lv_draw_fill_dsc_t fill;
-    lv_draw_fill_dsc_init(&fill);
-    fill.color = color;
-    lv_draw_rect(&face_layer, &fill, &ca);
+    lv_draw_rect_dsc_t rect_dsc;
+    lv_draw_rect_dsc_init(&rect_dsc);
+    rect_dsc.bg_color = color;
+    rect_dsc.bg_opa = LV_OPA_COVER;
+    lv_draw_rect(&face_layer, &rect_dsc, &ca);
 }
 
 static void draw_face_thinking(int cx, int cy, lv_color_t color) {
@@ -223,19 +231,21 @@ static void draw_face_thinking(int cx, int cy, lv_color_t color) {
         if (ds < 1) ds = 1;
         lv_area_t a = {(lv_coord_t)(px - ds), (lv_coord_t)(py - ds),
                        (lv_coord_t)(px + ds), (lv_coord_t)(py + ds)};
-        lv_draw_fill_dsc_t fill;
-        lv_draw_fill_dsc_init(&fill);
-        fill.color = color;
-        lv_draw_rect(&face_layer, &fill, &a);
+        lv_draw_rect_dsc_t rect_dsc;
+        lv_draw_rect_dsc_init(&rect_dsc);
+        rect_dsc.bg_color = color;
+        rect_dsc.bg_opa = LV_OPA_COVER;
+        lv_draw_rect(&face_layer, &rect_dsc, &a);
     }
     /* Pulsing center */
     int cs = 5 + (int)(sinf(g_state.anim_t * 4.0f) * 3.0f);
     lv_area_t ca = {(lv_coord_t)(cx - cs), (lv_coord_t)(cy - cs),
                     (lv_coord_t)(cx + cs), (lv_coord_t)(cy + cs)};
-    lv_draw_fill_dsc_t fill;
-    lv_draw_fill_dsc_init(&fill);
-    fill.color = color;
-    lv_draw_rect(&face_layer, &fill, &ca);
+    lv_draw_rect_dsc_t rect_dsc;
+    lv_draw_rect_dsc_init(&rect_dsc);
+    rect_dsc.bg_color = color;
+    rect_dsc.bg_opa = LV_OPA_COVER;
+    lv_draw_rect(&face_layer, &rect_dsc, &ca);
 }
 
 static void draw_face_speaking(int cx, int cy, lv_color_t color) {
@@ -250,10 +260,11 @@ static void draw_face_speaking(int cx, int cy, lv_color_t color) {
         if (h < 2) h = 2;
         lv_area_t a = {(lv_coord_t)(x - bar_w / 2), (lv_coord_t)(cy - h / 2),
                        (lv_coord_t)(x + bar_w / 2), (lv_coord_t)(cy + h / 2)};
-        lv_draw_fill_dsc_t fill;
-        lv_draw_fill_dsc_init(&fill);
-        fill.color = color;
-        lv_draw_rect(&face_layer, &fill, &a);
+        lv_draw_rect_dsc_t rect_dsc;
+        lv_draw_rect_dsc_init(&rect_dsc);
+        rect_dsc.bg_color = color;
+        rect_dsc.bg_opa = LV_OPA_COVER;
+        lv_draw_rect(&face_layer, &rect_dsc, &a);
     }
 }
 
@@ -261,48 +272,50 @@ static void draw_face_error(int cx, int cy, lv_color_t color) {
     if (sinf(g_state.anim_t * 6.0f) <= 0) return;
     int s = 12;
     int w = 3;
+
     lv_draw_line_dsc_t line;
     lv_draw_line_dsc_init(&line);
     line.color = color;
     line.width = w;
+    line.p1.x = cx - s;
+    line.p1.y = cy - s;
+    line.p2.x = cx + s;
+    line.p2.y = cy + s;
+    lv_draw_line(&face_layer, &line);
 
-    lv_point_t pts1[] = {{(lv_coord_t)(cx - s), (lv_coord_t)(cy - s)},
-                         {(lv_coord2_t){(lv_coord_t)(cx + s), (lv_coord_t)(cy + s)}}};
-    lv_draw_line(&face_layer, &line, pts1, 2);
-
-    lv_point_t pts2[] = {{(lv_coord_t)(cx + s), (lv_coord_t)(cy - s)},
-                         {(lv_coord2_t){(lv_coord_t)(cx - s), (lv_coord_t)(cy + s)}}};
-    lv_draw_line(&face_layer, &line, pts2, 2);
+    line.p1.x = cx + s;
+    line.p1.y = cy - s;
+    line.p2.x = cx - s;
+    line.p2.y = cy + s;
+    lv_draw_line(&face_layer, &line);
 }
 
 static void draw_face(void) {
     lv_canvas_fill_bg(face_canvas, BG_COLOR, LV_OPA_COVER);
     lv_canvas_init_layer(face_canvas, &face_layer);
 
-    int cw = lv_canvas_get_width(face_canvas);
-    int ch = lv_canvas_get_height(face_canvas);
-    int cx = cw / 2;
-    int cy = ch / 2;
+    int cx = g_canvas_w / 2;
+    int cy = g_canvas_h / 2;
     lv_color_t color = get_state_color(g_state.state);
 
     /* Outer glow */
-    lv_draw_fill_dsc_t glow_fill;
-    lv_draw_fill_dsc_init(&glow_fill);
-    glow_fill.color = color;
-    glow_fill.opa = LV_OPA_20;
+    lv_draw_rect_dsc_t glow_dsc;
+    lv_draw_rect_dsc_init(&glow_dsc);
+    glow_dsc.bg_color = color;
+    glow_dsc.bg_opa = LV_OPA_20;
     int glow_r = FACE_RADIUS + 15;
     lv_area_t ga = {(lv_coord_t)(cx - glow_r), (lv_coord_t)(cy - glow_r),
                     (lv_coord_t)(cx + glow_r), (lv_coord_t)(cy + glow_r)};
-    lv_draw_rect(&face_layer, &glow_fill, &ga);
+    lv_draw_rect(&face_layer, &glow_dsc, &ga);
 
     /* Face circle */
-    lv_draw_fill_dsc_t face_fill;
-    lv_draw_fill_dsc_init(&face_fill);
-    face_fill.color = lv_color_hex(0x1a1a2e);
-    face_fill.opa = LV_OPA_COVER;
+    lv_draw_rect_dsc_t face_dsc;
+    lv_draw_rect_dsc_init(&face_dsc);
+    face_dsc.bg_color = lv_color_hex(0x1a1a2e);
+    face_dsc.bg_opa = LV_OPA_COVER;
     lv_area_t fa = {(lv_coord_t)(cx - FACE_RADIUS), (lv_coord_t)(cy - FACE_RADIUS),
                     (lv_coord_t)(cx + FACE_RADIUS), (lv_coord_t)(cy + FACE_RADIUS)};
-    lv_draw_rect(&face_layer, &face_fill, &fa);
+    lv_draw_rect(&face_layer, &face_dsc, &fa);
 
     /* State-specific animation */
     switch (g_state.state) {
@@ -324,7 +337,6 @@ static void create_ui(void) {
     scr = lv_screen_active();
     lv_obj_set_style_bg_color(scr, BG_COLOR, 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
-    lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
 
     int scr_w = lv_display_get_horizontal_resolution(NULL);
     int scr_h = lv_display_get_vertical_resolution(NULL);
@@ -343,6 +355,9 @@ static void create_ui(void) {
     int face_area_h = scr_h - face_area_top - resp_area_h - pad;
     int face_size = (face_area_h < scr_w - pad * 2) ? face_area_h : scr_w - pad * 2;
     if (face_size < 40) face_size = 40;
+
+    g_canvas_w = face_size;
+    g_canvas_h = face_size;
 
     face_canvas = lv_canvas_create(scr);
     lv_canvas_set_buffer(face_canvas, face_buf, face_size, face_size,
@@ -527,7 +542,7 @@ static const struct lws_protocols ws_protocols[] = {
         .per_session_data_size = sizeof(ws_user_data_t),
         .rx_buffer_size        = WS_RX_BUF_SZ,
     },
-    LWS_PROTOCOL_LIST_TERM
+    { NULL, NULL, 0, 0 }
 };
 
 static void ws_connect(void) {
