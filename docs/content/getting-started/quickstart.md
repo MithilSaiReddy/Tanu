@@ -44,6 +44,14 @@ python3 main.py desk
 This starts the Python server and opens the Pygame character window. The client connects
 to the server via WebSocket automatically.
 
+On an SBC with a small SPI TFT (no X11), render straight to the framebuffer:
+
+```bash
+python3 main.py desk --panel
+```
+
+See [SBC Panel Mode](../guide/sbc-panel.md) for wiring and kernel setup.
+
 ### Web UI Only
 
 ```bash

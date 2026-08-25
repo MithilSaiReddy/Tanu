@@ -107,6 +107,16 @@ DEFAULT_CONFIG = {
         "gmail": {"client_creds": ""},
     },
     "tool_paths": [],
+    "ui": {
+        "display": "window",
+        "panel": {
+            "device": "/dev/fb0",
+            "width": 320,
+            "height": 240,
+            "fps": 24,
+            "rotation": 0,
+        },
+    },
 }
 
 

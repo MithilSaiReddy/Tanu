@@ -54,6 +54,7 @@ class StatusBar:
 
 class ResponseArea:
     BG = (26, 26, 40)
+    BG_ALPHA = 110
     TEXT_COLOR = (220, 220, 230)
     ERROR_COLOR = (255, 68, 68)
 
@@ -88,7 +89,9 @@ class ResponseArea:
                     self._follow = True
 
     def draw(self, surface):
-        pygame.draw.rect(surface, self.BG, self.rect)
+        overlay = pygame.Surface(self.rect.size, pygame.SRCALPHA)
+        overlay.fill((*self.BG, self.BG_ALPHA))
+        surface.blit(overlay, self.rect.topleft)
 
         line_h = self.font.get_linesize()
         pad = 6

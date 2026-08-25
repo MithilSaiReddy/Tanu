@@ -26,6 +26,7 @@ if _src_path not in sys.path:
 
 import argparse
 import multiprocessing
+import signal
 import threading
 import time
 
@@ -181,12 +182,32 @@ def cmd_desk(args):
     server_proc = multiprocessing.Process(target=_run_server, args=(port,), daemon=True)
     server_proc.start()
 
+    def _request_quit(sig=None, frame=None):
+        try:
+            import pygame
+            if pygame.get_init():
+                pygame.event.post(pygame.event.Event(pygame.QUIT))
+                return
+        except Exception:
+            pass
+        raise SystemExit(0)
+
+    signal.signal(signal.SIGINT, _request_quit)
+    signal.signal(signal.SIGTERM, _request_quit)
+
     exit_code = 0
     try:
+        from tanu.config import load_config
         from tanu.desktop import run_app
-        run_app(host="127.0.0.1", port=port)
+        from tanu.desktop.panel import resolve_display_mode
+        cfg = load_config()
+        mode = resolve_display_mode(getattr(args, "panel", False), cfg)
+        run_app(host="127.0.0.1", port=port, display_mode=mode, cfg=cfg)
     except KeyboardInterrupt:
         print()
+    except (FileNotFoundError, PermissionError) as e:
+        print(f"\n{e}")
+        exit_code = 1
     except ModuleNotFoundError as e:
         if "pygame" in str(e) or "websocket" in str(e):
             print(f"Missing dependency: {e}")
@@ -229,6 +250,8 @@ def main():
     sub.add_parser("status", help="Show status")
     p_desk = sub.add_parser("desk", help="Desktop app (Pygame + server)")
     p_desk.add_argument("--port", type=int, default=7337, help="Server port")
+    p_desk.add_argument("--panel", action="store_true",
+                        help="Render to TFT framebuffer (/dev/fb0) for SBCs")
 
     p_update = sub.add_parser("update", help="Update Tanu from GitHub")
     p_update.add_argument("--check", action="store_true", help="Check for updates without pulling")

@@ -37,6 +37,7 @@ nav:
     - Server API: guide/server-api.md
     - Gmail Integration: guide/gmail-integration.md
     - Tool System: guide/tool-system.md
+    - SBC Panel Mode: guide/sbc-panel.md
   - Development:
     - Setup: development/setup.md
     - Building: development/building.md

@@ -9,6 +9,9 @@
 The desktop UI uses Pygame (installed automatically via `requirements.txt`) —
 no engine or editor download required.
 
+Running on a single-board computer with a small SPI display?
+See [SBC Panel Mode](../guide/sbc-panel.md).
+
 ---
 
 ## Linux
