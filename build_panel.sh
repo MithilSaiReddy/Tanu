@@ -40,45 +40,49 @@ fi
 
 # ── Step 2: Configure and build LVGL ──────────────────────────────────────
 echo ""
-echo "--- Configuring LVGL (fbdev only, no Kconfig) ---"
+echo "--- Configuring LVGL (lv_conf.h, fbdev only) ---"
 cd "${LVGL_DIR}"
 
 # Clean build dir to ensure fresh config
 rm -rf build
 
+# Create lv_conf.h for non-Kconfig build
+cat > lv_conf.h << 'LVEOF'
+#ifndef LV_CONF_H
+#define LV_CONF_H
+
+#include <stdint.h>
+
+/* Color */
+#define LV_COLOR_DEPTH 16
+
+/* Fonts */
+#define LV_FONT_MONTSERRAT_14 1
+#define LV_FONT_MONTSERRAT_20 1
+#define LV_FONT_MONTSERRAT_28 1
+#define LV_FONT_DEFAULT &lv_font_montserrat_20
+
+/* Libraries */
+#define LV_USE_GIF 1
+#define LV_USE_FS_STDIO 0
+
+/* Demos */
+#define LV_USE_DEMO_WIDGETS 0
+
+#endif /* LV_CONF_H */
+LVEOF
+
 echo "Building LVGL core + fbdev backend..."
 if command -v ninja &>/dev/null; then
     cmake -B build -GNinja -DCMAKE_BUILD_TYPE=Release \
         -DLV_BUILD_USE_KCONFIG=OFF \
-        -DLV_USE_LINUX_FBDEV=ON \
-        -DLV_USE_SDL=OFF \
-        -DLV_USE_WAYLAND=OFF \
-        -DLV_USE_X11=OFF \
-        -DLV_USE_GLFW=OFF \
-        -DLV_USE_LINUX_DRM=OFF \
-        -DLV_COLOR_DEPTH=16 \
-        -DLV_FONT_MONTSERRAT_14=ON \
-        -DLV_FONT_MONTSERRAT_20=ON \
-        -DLV_FONT_MONTSERRAT_28=ON \
-        -DLV_FONT_DEFAULT=monserrat_20 \
-        -DLV_USE_GIF=ON \
+        -DLV_CONF_PATH=lv_conf.h \
         2>&1 | tail -10
     cmake --build build --target lvgl_linux -j"$(nproc)" 2>&1 | tail -10
 else
     cmake -B build -DCMAKE_BUILD_TYPE=Release \
         -DLV_BUILD_USE_KCONFIG=OFF \
-        -DLV_USE_LINUX_FBDEV=ON \
-        -DLV_USE_SDL=OFF \
-        -DLV_USE_WAYLAND=OFF \
-        -DLV_USE_X11=OFF \
-        -DLV_USE_GLFW=OFF \
-        -DLV_USE_LINUX_DRM=OFF \
-        -DLV_COLOR_DEPTH=16 \
-        -DLV_FONT_MONTSERRAT_14=ON \
-        -DLV_FONT_MONTSERRAT_20=ON \
-        -DLV_FONT_MONTSERRAT_28=ON \
-        -DLV_FONT_DEFAULT=monserrat_20 \
-        -DLV_USE_GIF=ON \
+        -DLV_CONF_PATH=lv_conf.h \
         2>&1 | tail -10
     cmake --build build --target lvgl_linux -j"$(nproc)" 2>&1 | tail -10
 fi
