@@ -163,19 +163,8 @@ static void create_ui(void) {
     lv_obj_align(response_label, LV_ALIGN_BOTTOM_LEFT, pad, -pad);
     printf("[UI] response_label OK\n"); fflush(stdout);
 
-    /* Character GIF — created last so labels always work even if GIF fails */
-    printf("[UI] creating lv_gif...\n"); fflush(stdout);
-    face_gif = lv_gif_create(scr);
-    if (!face_gif) {
-        printf("[UI] ERROR: lv_gif_create() returned NULL\n"); fflush(stdout);
-    } else {
-        printf("[UI] lv_gif_create OK, setting color format...\n"); fflush(stdout);
-        lv_gif_set_color_format(face_gif, LV_COLOR_FORMAT_ARGB8888);
-        printf("[UI] color format set, setting src...\n"); fflush(stdout);
-        lv_gif_set_src(face_gif, &gif_character);
-        printf("[UI] lv_gif_set_src OK\n"); fflush(stdout);
-        lv_obj_align(face_gif, LV_ALIGN_TOP_MID, 0, STATUS_BAR_H + pad * 2);
-    }
+    /* Character GIF — skip for now to test if labels render */
+    printf("[UI] SKIPPING GIF for diagnosis\n"); fflush(stdout);
     printf("[UI] create_ui done\n"); fflush(stdout);
 }
 
