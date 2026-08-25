@@ -91,7 +91,34 @@ sudo cmake --install ./build 2>&1 | tail -10
 
 echo "LVGL install done."
 
-# ── Step 4: Compile tanu_panel with gcc ───────────────────────────────────
+# ── Step 4: Generate GIF C array with LVGLImage.py ────────────────────────
+echo ""
+echo "--- Generating GIF C array ---"
+
+GIF_SRC="${WORK_DIR}/assets/character.gif"
+GIF_OUT_DIR="${PANEL_DIR}/src/tanu/desktop/lvgl_panel"
+LVGL_SCRIPTS="${LVGL_DIR}/lvgl/scripts"
+
+if [ ! -f "${GIF_SRC}" ]; then
+    echo "WARNING: ${GIF_SRC} not found, using ${PANEL_DIR}/src/tanu/assets/idle.gif"
+    GIF_SRC="${PANEL_DIR}/src/tanu/assets/idle.gif"
+fi
+
+if [ -f "${GIF_SRC}" ] && [ -d "${LVGL_SCRIPTS}" ]; then
+    python3 "${LVGL_SCRIPTS}/LVGLImage.py" \
+        --cf RAW --ofmt C \
+        -o "${GIF_OUT_DIR}" \
+        --name gif_character \
+        "${GIF_SRC}" 2>&1
+    echo "Generated ${GIF_OUT_DIR}/gif_character.c"
+else
+    echo "ERROR: LVGLImage.py or GIF not found"
+    echo "  GIF_SRC=${GIF_SRC}"
+    echo "  LVGL_SCRIPTS=${LVGL_SCRIPTS}"
+    exit 1
+fi
+
+# ── Step 5: Compile tanu_panel with gcc ───────────────────────────────────
 echo ""
 echo "--- Compiling tanu_panel ---"
 
@@ -100,7 +127,13 @@ if [ ! -f "${SRC_FILE}" ]; then
     exit 1
 fi
 
-gcc -O2 -o /tmp/tanu_panel "${SRC_FILE}" \
+GIF_C_FILE="${GIF_OUT_DIR}/gif_character.c"
+EXTRA_SRCS=""
+if [ -f "${GIF_C_FILE}" ]; then
+    EXTRA_SRCS="${GIF_C_FILE}"
+fi
+
+gcc -O2 -o /tmp/tanu_panel "${SRC_FILE}" ${EXTRA_SRCS} \
     -I/usr/local/include/lvgl \
     -I/usr/local/include/lvgl/config \
     -I/usr/local/include/lvgl_private \
@@ -111,7 +144,7 @@ gcc -O2 -o /tmp/tanu_panel "${SRC_FILE}" \
 
 echo "Compilation done."
 
-# ── Step 5: Install binary ────────────────────────────────────────────────
+# ── Step 6: Install binary ────────────────────────────────────────────────
 echo ""
 echo "--- Installing tanu_panel to /usr/local/bin ---"
 sudo cp /tmp/tanu_panel /usr/local/bin/tanu_panel
