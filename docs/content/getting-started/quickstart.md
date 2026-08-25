@@ -2,7 +2,7 @@
 
 ## 0. Setup Environment
 
-Run the setup script to install system dependencies, Python venv, and check for Godot:
+Run the setup script to install system dependencies and the Python venv:
 
 ```bash
 bash setup.sh
@@ -33,35 +33,15 @@ directly (see [Configuration](configuration.md)).
 pip install google-auth google-auth-oauthlib google-api-python-client
 ```
 
-## 3. Build the Desktop App
+## 3. Launch
 
-### One-Command Build (Recommended)
-
-```bash
-bash build.sh
-```
-
-This exports the Godot project as a standalone binary in `build/tanu-godot`.
-
-### Manual Build
-
-Open the project in Godot editor and export:
-
-```bash
-godot --path src/godot
-```
-
-Then use **Project → Export** to create a standalone binary.
-
-## 4. Launch
-
-### Desktop Mode (Godot Character + Chat)
+### Desktop Mode (Pygame Character + Chat)
 
 ```bash
 python3 main.py desk
 ```
 
-This starts the Python server and launches the Godot client. The client connects
+This starts the Python server and opens the Pygame character window. The client connects
 to the server via WebSocket automatically.
 
 ### Web UI Only
@@ -78,7 +58,7 @@ Then open `http://localhost:7337` in a browser.
 python3 main.py agent
 ```
 
-## 5. Usage
+## 4. Usage
 
 Once the desktop app is running:
 
@@ -97,6 +77,6 @@ See [Gmail Integration](../guide/gmail-integration.md) for setting up email acce
 | Symptom | Likely Cause | Fix |
 |---------|-------------|------|
 | "Connecting..." stuck | Server not running | Ensure `python3 main.py desk` is running |
-| Godot window not appearing | Binary not built | Run `bash build.sh` or export from Godot editor |
 | No response to messages | WebSocket not connected | Check server is running on port 7337 |
+| Missing pygame / websocket | Deps not installed | Run `pip install -r requirements.txt` |
 | Gmail tools not found by LLM | `tool_paths` not injected | Use `python3 main.py desk` (not `main.py serve` alone) |

@@ -1,37 +1,29 @@
 # Components
 
-## Godot 4 Desktop Client (`src/godot/`)
+## Pygame Desktop Client (`src/tanu/desktop/`)
 
-The desktop client is a Godot 4 project written in GDScript.
+The desktop client is a Python package built on Pygame.
 
-### Autoloads
-
-| File | Role |
-|------|------|
-| `autoload/ws.gd` | WebSocket client singleton — auto-reconnects, emits signals for connected/disconnected/message_received |
-
-### Scripts
+### Modules
 
 | File | Role |
 |------|------|
-| `scripts/main.gd` | Main scene controller — wires UI signals, handles input, processes WS messages, updates UI |
-| `scripts/character.gd` | Animated character state machine — idle, listening, thinking, speaking, error states |
+| `ws_client.py` | WebSocket client thread — auto-reconnects every 3s, buffers sends while offline, pushes JSON events to the UI via a queue |
+| `app.py` | Main UI loop — owns the 400x400 window, routes WS messages, handles input |
+| `character.py` | Animated character state machine — idle, listening, thinking, speaking, error states |
+| `widgets.py` | Chat widgets — status bar with connection dot, scrollable response area, input field, send button |
 
-### Scene Structure
+### Layout
 
 ```
-Main (Control)
-├── Background (ColorRect)        — dark background
-├── Character (Node2D)            — animated face (procedural drawing)
-└── UI (MarginContainer)
-    └── VBox
-        ├── TopBar (HBoxContainer)
-        │   ├── ConnectionDot     — green/red status indicator
-        │   └── StatusLabel       — "Ready", "Thinking...", "Speaking..."
-        ├── ResponseLabel         — RichTextLabel for streaming responses
-        └── InputRow (HBoxContainer)
-            ├── InputField        — LineEdit for user input
-            └── SendButton        — Button to send message
+400x400 window
+├── Status bar
+│   ├── Connection dot            — green/red status indicator
+│   └── Status text               — "Ready", "Thinking...", "Speaking..."
+├── Response area                 — word-wrapped, scrollable streaming text
+└── Input row
+    ├── Input field               — "Type a message..." (Enter submits)
+    └── Send button
 ```
 
 ### WebSocket Protocol
@@ -40,7 +32,7 @@ The client connects to `ws://localhost:7337/ws/chat` and exchanges JSON messages
 
 **Client → Server:**
 ```json
-{"type": "chat", "message": "hello", "session_id": "godot:main"}
+{"type": "chat", "message": "hello", "session_id": "desktop:main"}
 {"type": "status"}
 {"type": "config"}
 ```
@@ -65,7 +57,7 @@ The client connects to `ws://localhost:7337/ws/chat` and exchanges JSON messages
 
 | Command | Description |
 |---------|-------------|
-| `python3 main.py desk` | Launch server + Godot desktop app |
+| `python3 main.py desk` | Launch server + Pygame desktop app |
 | `python3 main.py serve` | Launch server only (web UI + WebSocket) |
 | `python3 main.py tanu` | Voice assistant mode |
 | `python3 main.py tanu --text` | Text-only terminal assistant |
@@ -73,8 +65,8 @@ The client connects to `ws://localhost:7337/ws/chat` and exchanges JSON messages
 
 The `desk` command:
 1. Starts the Python server in a subprocess via `multiprocessing.Process`
-2. Launches the Godot binary
-3. Cleans up both processes on Ctrl+C or exit
+2. Runs the Pygame client in-process (main thread)
+3. Terminates the server on Ctrl+C or when the window closes
 
 **Config loading**: Both `desk` and `serve` use `tanu.config.load_config()`,
 which merges on-disk config over defaults and injects `tool_paths` for

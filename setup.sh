@@ -65,23 +65,6 @@ if [ -z "$PYTHON" ]; then
 fi
 log "Python: $($PYTHON --version)"
 
-# Check for Godot 4
-GODOT=""
-for bin in godot godot4; do
-    if command -v "$bin" &>/dev/null; then
-        GODOT="$bin"
-        break
-    fi
-done
-
-if [ -z "$GODOT" ]; then
-    warn "Godot 4 not found in PATH."
-    warn "  Download: https://godotengine.org/download"
-    warn "  The desktop UI (python main.py desk) requires Godot."
-else
-    log "Godot:  $($GODOT --version 2>/dev/null || echo 'found')"
-fi
-
 # ─────────────────────────────────────────────────────────────
 # 3. Install system dependencies
 # ─────────────────────────────────────────────────────────────

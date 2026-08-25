@@ -7,7 +7,7 @@ Usage:
     python main.py tanu --text       # Text mode (no audio)
     python main.py onboard           # First-time setup
     python main.py serve             # Web UI (HTTP + WebSocket)
-    python main.py desk              # Desktop app (Godot + server)
+    python main.py desk              # Desktop app (Pygame UI + server)
     python main.py agent             # Chat in terminal
 
 Requirements:
@@ -26,11 +26,8 @@ if _src_path not in sys.path:
 
 import argparse
 import multiprocessing
-import subprocess
 import threading
 import time
-import signal
-import webbrowser
 
 from tanu import LOGO as TANU_LOGO
 from tanu.config import load_config, workspace_path, get_active_provider
@@ -168,37 +165,12 @@ def cmd_update(args):
 
 
 def cmd_desk(args):
-    ROOT = Path(__file__).parent
-
-    GODOT_BINS = [
-        ROOT / "build" / "tanu-godot",
-        ROOT / "build" / "tanu-godot-arm64",
-        ROOT / "build" / "tanu",
-        ROOT / "src" / "godot" / "build" / "tanu",
-        ROOT / "build" / "tanu-godot.x86_64",
-    ]
-
-    ui_bin = None
-
-    for b in GODOT_BINS:
-        if b.exists():
-            ui_bin = b
-            break
-
-    if not ui_bin:
-        print("No Godot binary found. Build one first:")
-        print()
-        print("  1. Install Godot 4: https://godotengine.org/download")
-        print("  2. Export: cd src/godot && godot --export-release linux")
-        print("  3. Copy binary to build/tanu-godot")
-        print()
-        print("  Then run: python main.py desk")
-        return
+    port = getattr(args, "port", 7337) or 7337
 
     print("Starting server + desktop app...")
-    print(f"   Server:  http://localhost:7337")
-    print(f"   WS:      ws://localhost:7337/ws/chat")
-    print(f"   UI:      godot ({ui_bin})")
+    print(f"   Server:  http://localhost:{port}")
+    print(f"   WS:      ws://localhost:{port}/ws/chat")
+    print("   UI:      pygame")
 
     try:
         from tanu.notifier import notify
@@ -206,48 +178,24 @@ def cmd_desk(args):
     except Exception:
         pass
 
-    port = getattr(args, "port", 7337) or 7337
     server_proc = multiprocessing.Process(target=_run_server, args=(port,), daemon=True)
     server_proc.start()
 
-    ui_env = os.environ.copy()
-    if "LD_LIBRARY_PATH" in ui_env:
-        del ui_env["LD_LIBRARY_PATH"]
-
-    ui_proc = subprocess.Popen(
-        [str(ui_bin)],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-        text=True,
-        env=ui_env,
-    )
-
-    time.sleep(2.5)
-    if ui_proc.poll() is not None:
-        stderr_output = ui_proc.stderr.read()
-        print("Godot app crashed:")
-        if stderr_output:
-            print(stderr_output)
+    exit_code = 0
+    try:
+        from tanu.desktop import run_app
+        run_app(host="127.0.0.1", port=port)
+    except KeyboardInterrupt:
+        print()
+    except ModuleNotFoundError as e:
+        if "pygame" in str(e) or "websocket" in str(e):
+            print(f"Missing dependency: {e}")
+            print("   Run: pip install -r requirements.txt")
+            exit_code = 1
         else:
-            print("   (no stderr output)")
-        server_proc.terminate()
-        return
-
-    cleanup_done = threading.Event()
-
-    def cleanup(sig=None, frame=None):
-        if cleanup_done.is_set():
-            return
-        cleanup_done.set()
+            raise
+    finally:
         print("\nShutting down...")
-        if ui_proc.poll() is None:
-            ui_proc.terminate()
-            try:
-                ui_proc.wait(timeout=5)
-            except Exception:
-                pass
-            if ui_proc.poll() is None:
-                ui_proc.kill()
         server_proc.terminate()
         try:
             server_proc.join(timeout=5)
@@ -256,15 +204,8 @@ def cmd_desk(args):
         if server_proc.is_alive():
             server_proc.kill()
 
-    signal.signal(signal.SIGINT, cleanup)
-    signal.signal(signal.SIGTERM, cleanup)
-    import atexit
-    atexit.register(cleanup)
-
-    try:
-        ui_proc.wait()
-    except KeyboardInterrupt:
-        cleanup()
+    if exit_code:
+        raise SystemExit(exit_code)
 
 
 def _ensure_workspace():
@@ -286,7 +227,8 @@ def main():
     sub.add_parser("onboard", help="First-time setup")
     sub.add_parser("serve", help="Web UI")
     sub.add_parser("status", help="Show status")
-    sub.add_parser("desk", help="Desktop app (Godot + server)")
+    p_desk = sub.add_parser("desk", help="Desktop app (Pygame + server)")
+    p_desk.add_argument("--port", type=int, default=7337, help="Server port")
 
     p_update = sub.add_parser("update", help="Update Tanu from GitHub")
     p_update.add_argument("--check", action="store_true", help="Check for updates without pulling")
@@ -294,7 +236,7 @@ def main():
     p_update.add_argument("--force", action="store_true", help="Skip the dirty-tree check")
     p_update.add_argument("-y", "--yes", dest="yes", action="store_true", help="Skip the confirmation prompt")
     p_update.add_argument("--no-deps", dest="no_deps", action="store_true", help="Skip pip reinstall")
-    p_update.add_argument("--no-build", dest="no_build", action="store_true", help="Skip Godot rebuild")
+    p_update.add_argument("--no-build", dest="no_build", action="store_true", help="Deprecated (no-op)")
 
     p_tanu = sub.add_parser("tanu", help="Start voice assistant")
     p_tanu.add_argument("--text", dest="text_mode", action="store_true", help="Text mode")

@@ -51,18 +51,6 @@ if (Get-Command python -ErrorAction SilentlyContinue) {
     Err "Python not found. Install from: https://python.org"
 }
 
-# Check for Godot 4
-$godot = $null
-foreach ($name in @("godot", "godot4")) {
-    $cmd = Get-Command $name -ErrorAction SilentlyContinue
-    if ($cmd) { $godot = $cmd.Source; break }
-}
-if ($godot) {
-    Log "Godot: $godot"
-} else {
-    Warn "Godot 4 not found. Download: https://godotengine.org/download"
-}
-
 # ────────────────────────────────────────────────────────────
 # 2. Install system dependencies
 # ────────────────────────────────────────────────────────────

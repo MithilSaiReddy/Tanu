@@ -2,14 +2,12 @@
 tanu/updater.py — `python3 main.py update`.
 
 Self-update from the configured git remote (GitHub). Pulls new commits
-fast-forward-only, then optionally reinstalls Python deps and rebuilds the
-Godot binary. Never touches config/ or workspace/ (both gitignored).
+fast-forward-only, then optionally reinstalls Python deps. Never touches
+config/ or workspace/ (both gitignored).
 """
 
 from __future__ import annotations
 
-import os
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -75,29 +73,6 @@ def _install_deps(root: Path) -> None:
         _print("Dependencies up to date")
     else:
         _print(f"pip install failed (exit {proc.returncode})")
-
-
-def _run_build(root: Path) -> None:
-    if os.name == "nt":
-        script = root / "build.ps1"
-        runner = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script)]
-    else:
-        script = root / "build.sh"
-        runner = ["bash", str(script)]
-
-    if not script.exists():
-        _print(f"{script.name} not found — skipping Godot rebuild")
-        return
-    if not shutil.which(runner[0]):
-        _print(f"'{runner[0]}' not available — skipping Godot rebuild")
-        return
-
-    _print("Rebuilding Godot binary...")
-    proc = subprocess.run(runner)
-    if proc.returncode == 0:
-        _print("Godot build complete")
-    else:
-        _print(f"Godot build failed (exit {proc.returncode}) — install Godot or use --no-build")
 
 
 def _pop_stash(cwd: Path) -> None:
@@ -209,11 +184,8 @@ def run_update(*, check=False, stash=False, force=False, yes=False, deps=True, b
     else:
         _print("skipping dependency reinstall (--no-deps)")
 
-    # 7. rebuild Godot
-    if build:
-        _run_build(cwd)
-    else:
-        _print("skipping Godot rebuild (--no-build)")
+    if not build:
+        _print("--no-build is deprecated (no binary build needed anymore)")
 
     print("\n[update] done. config/ and workspace/ were not touched (gitignored).")
     return 0

@@ -17,12 +17,6 @@
 - Use type hints where practical
 - Avoid unnecessary comments — code should be self-documenting
 
-### GDScript (Godot)
-
-- Follow the [GDScript style guide](https://docs.godotengine.org/en/stable/tutorials/scripting/gdscript/gdscript_styleguide.html)
-- Use snake_case for variables/functions, PascalCase for classes
-- Signals should use past tense (e.g., `connected`, `message_received`)
-
 ## Git Workflow
 
 The Tanu agent framework lives directly in this repository under
@@ -40,7 +34,7 @@ file in this repository.
 ## Pull Request Checklist
 
 - [ ] Server starts without errors (`python3 main.py serve`)
-- [ ] Godot client connects and streams responses
+- [ ] Desktop client connects and streams responses (`python3 main.py desk`)
 - [ ] No new warnings or errors
 - [ ] Gmail flow tested (if applicable)
 - [ ] `.gitignore` updated for any new generated files
@@ -79,4 +73,4 @@ Open an issue on GitHub with:
 - Description of the bug or feature request
 - Steps to reproduce (for bugs)
 - Relevant logs or screenshots
-- Environment info (OS, Godot version, Python version)
+- Environment info (OS, Python version)

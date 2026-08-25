@@ -45,10 +45,6 @@ realtimesst.log
 # --- Script artifacts ---
 test_deskbot.sh
 
-# --- Godot ---
-src/godot/.godot/
-src/godot/.import/
-
 # --- MkDocs ---
 /site
 

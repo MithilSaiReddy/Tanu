@@ -4,66 +4,40 @@
 
 | Dependency | Min. Version | Purpose |
 |-----------|--------------|---------|
-| Python    | >= 3.10      | Backend server & agent framework |
-| Godot 4   | >= 4.0       | Desktop character UI |
+| Python    | >= 3.10      | Backend server, agent framework & desktop UI |
+
+The desktop UI uses Pygame (installed automatically via `requirements.txt`) —
+no engine or editor download required.
 
 ---
 
 ## Linux
 
-### Python
-
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 ```
-
-### Godot 4
-
-Download from [godotengine.org](https://godotengine.org/download):
-
-```bash
-# After downloading, make it executable
-chmod +x ~/Downloads/Godot_v4*-linux.x86_64
-
-# Optional: move to a PATH-accessible location
-sudo cp ~/Downloads/Godot_v4*-linux.x86_64 /usr/local/bin/godot
-```
-
-Or install via package manager (if available for your distro).
 
 ---
 
 ## macOS
 
-### Python
-
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### Godot 4
-
-Download from [godotengine.org](https://godotengine.org/download) — choose the macOS version.
-
 ---
 
 ## Windows
-
-### Python
 
 ```powershell
 python -m venv venv
 .\venv\Scripts\activate
 pip install -r requirements.txt
 ```
-
-### Godot 4
-
-Download from [godotengine.org](https://godotengine.org/download) — choose the Windows version.
 
 ---
 

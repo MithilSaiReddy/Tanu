@@ -29,6 +29,8 @@ dependencies = [
     "aiohttp",
     "sounddevice",
     "piper-tts",
+    "pygame-ce",
+    "websocket-client",
 ]
 
 [project.optional-dependencies]

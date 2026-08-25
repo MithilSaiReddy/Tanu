@@ -6,6 +6,8 @@ requests
 aiohttp
 sounddevice
 piper-tts
+pygame-ce
+websocket-client
 
 # Optional: Wake word detection
 openwakeword

@@ -464,7 +464,7 @@ async def handle_ws_chat(request):
     ws = web.WebSocketResponse()
     await ws.prepare(request)
 
-    session_id = request.query.get("session_id", "godot:main")
+    session_id = request.query.get("session_id", "desktop:main")
 
     try:
         async for msg in ws:

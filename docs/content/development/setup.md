@@ -40,25 +40,13 @@ pip install google-auth google-auth-oauthlib google-api-python-client
 
 ## Running in Development
 
-### Desktop App (with Godot editor)
-
-```bash
-# Terminal 1: start Python server
-python3 main.py serve
-
-# Terminal 2: open Godot project (has live scene editing)
-godot --path src/godot
-```
-
-The Godot editor connects to `ws://localhost:7337/ws/chat`.
-
-### Desktop App (release binary)
+### Desktop App
 
 ```bash
 python3 main.py desk
 ```
 
-This starts both the Python server and the Godot binary.
+This starts the Python server (subprocess) and opens the Pygame window (in-process).
 
 ### Server-only
 
@@ -72,29 +60,25 @@ python3 main.py serve
 Tanu/
 ├── main.py                 # Entry points (desk, serve, tanu, onboard)
 ├── src/
-│   ├── tanu/               # Tanu Python package (agent, server, tools, voice)
-│   │   ├── config.py       # Config loader (injects tool_paths)
-│   │   ├── server.py       # aiohttp HTTP + WebSocket server
-│   │   ├── agent.py        # AgentLoop, Heartbeat, Cron
-│   │   ├── tools/          # Built-in + custom tools (gmail, tasks, reminders, etc.)
-│   │   ├── connections/    # Telegram / Discord channels
-│   │   └── plugins/
-│   │       └── voice/      # Voice assistant plugin
-│   └── godot/              # Godot 4 project
-│       ├── project.godot   # Godot project config
-│       ├── autoload/
-│       │   └── ws.gd       # WebSocket client singleton
-│       ├── scripts/
-│       │   ├── main.gd     # Main scene controller
-│       │   └── character.gd # Animated character state machine
-│       └── scenes/
-│           └── main.tscn   # Main scene layout
+│   └── tanu/               # Tanu Python package (agent, server, tools, voice)
+│       ├── config.py       # Config loader (injects tool_paths)
+│       ├── server.py       # aiohttp HTTP + WebSocket server
+│       ├── agent.py        # AgentLoop, Heartbeat, Cron
+│       ├── tools/          # Built-in + custom tools (gmail, tasks, reminders, etc.)
+│       ├── connections/    # Telegram / Discord channels
+│       ├── plugins/
+│       │   └── voice/      # Voice assistant plugin
+│       └── desktop/        # Pygame desktop client
+│           ├── app.py      # Main UI loop
+│           ├── character.py # Animated character state machine
+│           ├── widgets.py  # Chat widgets
+│           └── ws_client.py # WebSocket client thread
 ├── docs/                   # MkDocs documentation
-├── build.sh / build.ps1   # Build scripts (produce build/)
-├── setup.sh / setup.ps1   # Dev environment setup
+├── scripts/                # launch / packaging helpers
+├── setup.sh / setup.ps1    # Dev environment setup
 ├── config/                 # Local config (gitignored)
 ├── workspace/              # Runtime data (gitignored)
-└── build/                  # Build output (gitignored)
+└── build/                  # Packaging output (gitignored)
 ```
 
 ## Testing
@@ -112,11 +96,10 @@ python3 -m pytest tests/
 2. Register the handler function
 3. Restart the server
 
-### Modify the Godot client
+### Modify the desktop client
 
-1. Edit files in `src/godot/`
-2. Run the Godot editor: `godot --path src/godot`
-3. Changes to GDScript files are picked up on scene reload
+1. Edit files in `src/tanu/desktop/`
+2. Restart `python3 main.py desk` to see changes
 
 ### Add a new tool
 
