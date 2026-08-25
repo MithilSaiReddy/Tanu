@@ -32,6 +32,7 @@ echo "  Panel dir:  ${PANEL_DIR}"
 if [ ! -d "${LVGL_DIR}" ]; then
     echo ""
     echo "--- Cloning lv_port_linux ---"
+    mkdir -p "${WORK_DIR}"
     cd "${WORK_DIR}"
     git clone --recurse-submodules https://github.com/lvgl/lv_port_linux.git
 fi
