@@ -13344,13 +13344,17 @@ unsigned char src_tanu_assets_idle_gif[] = {
 unsigned int src_tanu_assets_idle_gif_len = 160029;
 
 static const lv_image_dsc_t gif_character = {
+    .header.magic = LV_IMAGE_HEADER_MAGIC,
     .header.cf = LV_COLOR_FORMAT_RAW,
-    .header.always_zero = 0,
-    .header.reserved = 0,
+    .header.flags = 0,
     .header.w = 320,
     .header.h = 320,
+    .header.stride = 0,
+    .header.reserved_2 = 0,
     .data_size = 160029,
     .data = src_tanu_assets_idle_gif,
+    .reserved = NULL,
+    .reserved_2 = NULL,
 };
 
 #endif /* GIF_CHARACTER_H */
