@@ -20,6 +20,8 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "gif_character.h"
+
 /* ---------------------------------------------------------------------------
  * Configuration
  * ------------------------------------------------------------------------- */
@@ -31,7 +33,6 @@
 #define ANIM_TICK_MS     50  /* 20 fps — GIF handles its own frame timing */
 
 #define BG_COLOR         lv_color_hex(0x14141f)
-#define CHAR_GIF_PATH    "S:character.gif"
 
 /* ---------------------------------------------------------------------------
  * Globals
@@ -157,7 +158,7 @@ static void create_ui(void) {
     /* Character GIF — created last so labels always work even if GIF fails */
     face_gif = lv_gif_create(scr);
     lv_gif_set_color_format(face_gif, LV_COLOR_FORMAT_RGB565);
-    lv_gif_set_src(face_gif, CHAR_GIF_PATH);
+    lv_gif_set_src(face_gif, &gif_character);
     lv_obj_align(face_gif, LV_ALIGN_TOP_MID, 0, STATUS_BAR_H + pad * 2);
 }
 
@@ -389,7 +390,6 @@ static void print_usage(const char *prog) {
     fprintf(stderr,
         "Usage: %s [OPTIONS]\n"
         "  --ws-url URL    WebSocket server URL (default: ws://127.0.0.1:7337/ws/chat)\n"
-        "  --gif  PATH     Character GIF path (default: " CHAR_GIF_PATH ")\n"
         "  --help          Show this help\n",
         prog);
 }
@@ -397,19 +397,14 @@ static void print_usage(const char *prog) {
 int main(int argc, char **argv) {
     static struct option long_opts[] = {
         {"ws-url", required_argument, NULL, 'w'},
-        {"gif",    required_argument, NULL, 'g'},
         {"help",   no_argument,       NULL, 'h'},
         {NULL,     0,                 NULL, 0},
     };
     int opt;
-    while ((opt = getopt_long(argc, argv, "w:g:h", long_opts, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "w:h", long_opts, NULL)) != -1) {
         switch (opt) {
         case 'w':
             strncpy(g_ws_url, optarg, sizeof(g_ws_url) - 1);
-            break;
-        case 'g':
-            /* Could override CHAR_GIF_PATH — for now just validate */
-            printf("GIF path: %s\n", optarg);
             break;
         case 'h':
             print_usage(argv[0]);
@@ -455,7 +450,7 @@ int main(int argc, char **argv) {
 
     printf("Tanu LVGL panel starting...\n");
     printf("  WS URL: %s\n", g_ws_url);
-    printf("  GIF:    %s\n", CHAR_GIF_PATH);
+    printf("  GIF:    embedded\n");
     printf("  Device: /dev/fb0\n");
 
     /* Initial label update */
