@@ -38,47 +38,48 @@ if [ ! -d "${LVGL_DIR}" ]; then
     git clone --recurse-submodules https://github.com/lvgl/lv_port_linux.git
 fi
 
-# ── Step 2: Configure and build LVGL with Kconfig ─────────────────────────
+# ── Step 2: Configure and build LVGL ──────────────────────────────────────
 echo ""
-echo "--- Configuring LVGL (Kconfig, fbdev only) ---"
+echo "--- Configuring LVGL (fbdev only, no Kconfig) ---"
 cd "${LVGL_DIR}"
 
-# Set Kconfig options via environment for non-interactive defconfig
-export KCONFIG_CONFIG=".config"
-export KCONFIG_CONFIG_FILE=".config"
-
-# Create minimal .config with our options
-cat > .config << 'EOF'
-CONFIG_LV_USE_LINUX_FBDEV=y
-CONFIG_LV_USE_SDL=n
-CONFIG_LV_USE_WAYLAND=n
-CONFIG_LV_USE_X11=n
-CONFIG_LV_USE_GLFW=n
-CONFIG_LV_USE_LINUX_DRM=n
-CONFIG_LV_COLOR_DEPTH_16=y
-CONFIG_LV_FONT_MONTSERRAT_14=y
-CONFIG_LV_FONT_MONTSERRAT_20=y
-CONFIG_LV_FONT_MONTSERRAT_28=y
-CONFIG_LV_FONT_DEFAULT_MONTSERRAT_20=y
-CONFIG_LV_USE_GIF=y
-CONFIG_LV_USE_PERF_MONITOR=n
-CONFIG_LV_USE_LOG=n
-CONFIG_LV_USE_DEMO_WIDGETS=n
-CONFIG_LV_USE_DEMO_BENCHMARK=n
-CONFIG_LV_USE_DEMO_MUSIC=n
-EOF
-
-# Run defconfig to expand Kconfig defaults
-if command -v defconfig &>/dev/null; then
-    defconfig .config 2>/dev/null || true
-fi
+# Clean build dir to ensure fresh config
+rm -rf build
 
 echo "Building LVGL core + fbdev backend..."
 if command -v ninja &>/dev/null; then
-    cmake -B build -GNinja -DCMAKE_BUILD_TYPE=Release -DLV_BUILD_USE_KCONFIG=ON 2>&1 | tail -5
+    cmake -B build -GNinja -DCMAKE_BUILD_TYPE=Release \
+        -DLV_BUILD_USE_KCONFIG=OFF \
+        -DLV_USE_LINUX_FBDEV=ON \
+        -DLV_USE_SDL=OFF \
+        -DLV_USE_WAYLAND=OFF \
+        -DLV_USE_X11=OFF \
+        -DLV_USE_GLFW=OFF \
+        -DLV_USE_LINUX_DRM=OFF \
+        -DLV_COLOR_DEPTH=16 \
+        -DLV_FONT_MONTSERRAT_14=ON \
+        -DLV_FONT_MONTSERRAT_20=ON \
+        -DLV_FONT_MONTSERRAT_28=ON \
+        -DLV_FONT_DEFAULT=monserrat_20 \
+        -DLV_USE_GIF=ON \
+        2>&1 | tail -10
     cmake --build build --target lvgl_linux -j"$(nproc)" 2>&1 | tail -10
 else
-    cmake -B build -DCMAKE_BUILD_TYPE=Release -DLV_BUILD_USE_KCONFIG=ON 2>&1 | tail -5
+    cmake -B build -DCMAKE_BUILD_TYPE=Release \
+        -DLV_BUILD_USE_KCONFIG=OFF \
+        -DLV_USE_LINUX_FBDEV=ON \
+        -DLV_USE_SDL=OFF \
+        -DLV_USE_WAYLAND=OFF \
+        -DLV_USE_X11=OFF \
+        -DLV_USE_GLFW=OFF \
+        -DLV_USE_LINUX_DRM=OFF \
+        -DLV_COLOR_DEPTH=16 \
+        -DLV_FONT_MONTSERRAT_14=ON \
+        -DLV_FONT_MONTSERRAT_20=ON \
+        -DLV_FONT_MONTSERRAT_28=ON \
+        -DLV_FONT_DEFAULT=monserrat_20 \
+        -DLV_USE_GIF=ON \
+        2>&1 | tail -10
     cmake --build build --target lvgl_linux -j"$(nproc)" 2>&1 | tail -10
 fi
 
