@@ -204,6 +204,8 @@ def _run_lvgl_panel(port, cfg, panel_cfg, server_proc):
     """Launch the LVGL binary for panel rendering."""
     import subprocess
 
+    from tanu.desktop.panel import apply_lvgl_env, get_lvgl_binary_path
+
     lvgl_bin = get_lvgl_binary_path()
     if not lvgl_bin:
         print("\nLVGL panel binary not found.")
