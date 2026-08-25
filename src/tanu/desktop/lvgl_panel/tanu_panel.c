@@ -136,42 +136,16 @@ static void create_ui(void) {
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
 
     int scr_w = lv_display_get_horizontal_resolution(NULL);
-    int scr_h = lv_display_get_vertical_resolution(NULL);
     int pad = 4;
 
-    /* Status bar */
+    /* Status bar — created first so it always renders */
     status_label = lv_label_create(scr);
     lv_label_set_text(status_label, "Connecting...");
     lv_obj_set_style_text_color(status_label, lv_color_hex(0xaaaaaa), 0);
     lv_obj_set_style_text_font(status_label, &lv_font_montserrat_14, 0);
     lv_obj_align(status_label, LV_ALIGN_TOP_LEFT, pad, pad);
 
-    /* Character GIF — fills the middle area */
-    int face_area_top = STATUS_BAR_H + pad * 2;
-    int resp_area_h = RESPONSE_LINES * 22 + pad * 2;
-
-    face_gif = lv_gif_create(scr);
-    lv_gif_set_color_format(face_gif, LV_COLOR_FORMAT_ARGB8888);
-    lv_gif_set_src(face_gif, CHAR_GIF_PATH);
-    lv_obj_align(face_gif, LV_ALIGN_TOP_MID, 0, face_area_top);
-
-    /* Scale GIF to fit available height while maintaining aspect ratio */
-    int avail_h = scr_h - face_area_top - resp_area_h - pad;
-    int gif_h = lv_obj_get_height(face_gif);
-    int gif_w = lv_obj_get_width(face_gif);
-    if (gif_h > 0 && gif_h > avail_h) {
-        int scale = (avail_h * 256) / gif_h;
-        lv_image_set_scale(face_gif, scale);
-        /* Recalculate width after scale */
-        gif_w = (gif_w * scale) / 256;
-    }
-    /* Ensure it doesn't exceed screen width */
-    if (gif_w > scr_w - pad * 2) {
-        int scale = ((scr_w - pad * 2) * 256) / lv_obj_get_width(face_gif);
-        lv_image_set_scale(face_gif, scale);
-    }
-
-    /* Response ticker at bottom */
+    /* Response ticker — created second so it always renders */
     response_label = lv_label_create(scr);
     lv_label_set_text(response_label, "");
     lv_label_set_long_mode(response_label, LV_LABEL_LONG_WRAP);
@@ -179,6 +153,12 @@ static void create_ui(void) {
     lv_obj_set_style_text_color(response_label, lv_color_hex(0xdddddd), 0);
     lv_obj_set_style_text_font(response_label, &lv_font_montserrat_14, 0);
     lv_obj_align(response_label, LV_ALIGN_BOTTOM_LEFT, pad, -pad);
+
+    /* Character GIF — created last so labels always work even if GIF fails */
+    face_gif = lv_gif_create(scr);
+    lv_gif_set_color_format(face_gif, LV_COLOR_FORMAT_RGB565);
+    lv_gif_set_src(face_gif, CHAR_GIF_PATH);
+    lv_obj_align(face_gif, LV_ALIGN_TOP_MID, 0, STATUS_BAR_H + pad * 2);
 }
 
 /* ---------------------------------------------------------------------------
@@ -397,10 +377,8 @@ static lv_timer_t *update_timer;
 
 static void update_timer_cb(lv_timer_t *timer) {
     (void)timer;
-    if (g_state.dirty) {
-        update_ui();
-        g_state.dirty = 0;
-    }
+    update_ui();
+    lv_obj_invalidate(scr);
 }
 
 /* ---------------------------------------------------------------------------
@@ -482,6 +460,7 @@ int main(int argc, char **argv) {
 
     /* Initial label update */
     update_ui();
+    lv_obj_invalidate(scr);
 
     /* Main event loop */
     unsigned long last_ws_attempt = 0;
