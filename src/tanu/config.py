@@ -115,6 +115,7 @@ DEFAULT_CONFIG = {
             "height": 240,
             "fps": 24,
             "rotation": 0,
+            "driver": "lvgl",
         },
     },
 }

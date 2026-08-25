@@ -1,14 +1,15 @@
 """
 Display mode resolution for the desktop UI.
 
-Two modes:
-  - "window": regular 400x400 desktop window (default)
-  - "panel":  renders directly to a small TFT framebuffer (/dev/fb0) via
-              SDL's fbcon driver — no X11/Wayland needed. Target: SBCs like
-              the Radxa Cubie A7Z with an ILI9341-class SPI panel.
+Three display modes:
+  - "window":  regular 400x400 desktop window (default)
+  - "panel":   renders directly to a small TFT framebuffer (/dev/fb0)
+               using either LVGL (native C binary) or SDL fbcon.
+               Target: SBCs like the Radxa Cubie A7Z with an ILI9341 panel.
 """
 
 import os
+import shutil
 from pathlib import Path
 
 DEFAULT_PANEL = {
@@ -17,6 +18,7 @@ DEFAULT_PANEL = {
     "height": 240,
     "fps": 24,
     "rotation": 0,
+    "driver": "lvgl",
 }
 
 
@@ -39,12 +41,28 @@ def get_panel_cfg(cfg: dict) -> dict:
         pass
     if panel["rotation"] not in (0, 90, 180, 270):
         panel["rotation"] = 0
+    driver = panel.get("driver", "lvgl")
+    if driver not in ("lvgl", "pygame"):
+        driver = "lvgl"
+    panel["driver"] = driver
     return panel
 
 
-def apply_panel_env(panel_cfg: dict) -> None:
-    """Set SDL env vars. Must run before pygame.init()/set_mode()."""
-    device = panel_cfg["device"]
+def get_lvgl_binary_path() -> str | None:
+    """Return the path to the tanu_panel LVGL binary, or None if not found."""
+    candidates = [
+        shutil.which("tanu_panel"),
+        "/opt/tanu/lvgl_panel/build/tanu_panel",
+        str(Path(__file__).resolve().parent.parent.parent.parent / "lvgl_panel" / "build" / "tanu_panel"),
+    ]
+    for c in candidates:
+        if c and Path(c).exists() and os.access(c, os.X_OK):
+            return c
+    return None
+
+
+def _validate_framebuffer(device: str) -> None:
+    """Raise if the framebuffer device is missing or inaccessible."""
     if not Path(device).exists():
         raise FileNotFoundError(
             f"Panel framebuffer {device} not found.\n"
@@ -57,6 +75,17 @@ def apply_panel_env(panel_cfg: dict) -> None:
             "   Add your user to the video group, then log out/in:\n"
             "   sudo usermod -aG video $USER"
         )
+
+
+def apply_panel_env(panel_cfg: dict) -> None:
+    """Set SDL env vars for pygame panel mode. Must run before pygame.init()."""
+    _validate_framebuffer(panel_cfg["device"])
     os.environ["SDL_VIDEODRIVER"] = "fbcon"
-    os.environ["SDL_FBDEV"] = device
+    os.environ["SDL_FBDEV"] = panel_cfg["device"]
     os.environ.setdefault("SDL_NOMOUSE", "1")
+
+
+def apply_lvgl_env(panel_cfg: dict) -> None:
+    """Set env vars for LVGL panel mode."""
+    _validate_framebuffer(panel_cfg["device"])
+    os.environ["LV_LINUX_FBDEV_DEVICE"] = panel_cfg["device"]

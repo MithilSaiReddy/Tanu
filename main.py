@@ -168,10 +168,22 @@ def cmd_update(args):
 def cmd_desk(args):
     port = getattr(args, "port", 7337) or 7337
 
+    from tanu.config import load_config
+    from tanu.desktop.panel import (
+        get_panel_cfg,
+        get_lvgl_binary_path,
+        apply_lvgl_env,
+        resolve_display_mode,
+    )
+    cfg = load_config()
+    mode = resolve_display_mode(getattr(args, "panel", False), cfg)
+    panel_cfg = get_panel_cfg(cfg) if mode == "panel" else {}
+    driver = panel_cfg.get("driver", "lvgl") if mode == "panel" else "pygame"
+
     print("Starting server + desktop app...")
     print(f"   Server:  http://localhost:{port}")
     print(f"   WS:      ws://localhost:{port}/ws/chat")
-    print("   UI:      pygame")
+    print(f"   UI:      {driver} ({mode} mode)")
 
     try:
         from tanu.notifier import notify
@@ -182,6 +194,63 @@ def cmd_desk(args):
     server_proc = multiprocessing.Process(target=_run_server, args=(port,), daemon=True)
     server_proc.start()
 
+    if mode == "panel" and driver == "lvgl":
+        _run_lvgl_panel(port, cfg, panel_cfg, server_proc)
+    else:
+        _run_pygame_desk(port, mode, cfg, server_proc)
+
+
+def _run_lvgl_panel(port, cfg, panel_cfg, server_proc):
+    """Launch the LVGL binary for panel rendering."""
+    import subprocess
+
+    lvgl_bin = get_lvgl_binary_path()
+    if not lvgl_bin:
+        print("\nLVGL panel binary not found.")
+        print("   Build it: see docs/content/guide/sbc-panel.md#lvgl-panel")
+        server_proc.terminate()
+        raise SystemExit(1)
+
+    apply_lvgl_env(panel_cfg)
+    ws_url = f"ws://127.0.0.1:{port}/ws/chat"
+    print(f"   LVGL:   {lvgl_bin}")
+
+    def _shutdown(sig=None, frame=None):
+        raise SystemExit(0)
+
+    signal.signal(signal.SIGINT, _shutdown)
+    signal.signal(signal.SIGTERM, _shutdown)
+
+    exit_code = 0
+    try:
+        subprocess.run(
+            [lvgl_bin, "--ws-url", ws_url],
+            check=True,
+        )
+    except FileNotFoundError:
+        print(f"\nLVGL binary not found at {lvgl_bin}")
+        exit_code = 1
+    except subprocess.CalledProcessError as e:
+        print(f"\nLVGL panel exited with code {e.returncode}")
+        exit_code = e.returncode
+    except KeyboardInterrupt:
+        pass
+    finally:
+        print("\nShutting down...")
+        server_proc.terminate()
+        try:
+            server_proc.join(timeout=5)
+        except Exception:
+            pass
+        if server_proc.is_alive():
+            server_proc.kill()
+
+    if exit_code:
+        raise SystemExit(exit_code)
+
+
+def _run_pygame_desk(port, mode, cfg, server_proc):
+    """Launch the Pygame desktop UI (original path)."""
     def _request_quit(sig=None, frame=None):
         try:
             import pygame
@@ -197,12 +266,10 @@ def cmd_desk(args):
 
     exit_code = 0
     try:
-        from tanu.config import load_config
-        from tanu.desktop import run_app
-        from tanu.desktop.panel import resolve_display_mode
-        cfg = load_config()
-        mode = resolve_display_mode(getattr(args, "panel", False), cfg)
-        run_app(host="127.0.0.1", port=port, display_mode=mode, cfg=cfg)
+        from tanu.desktop.app import TanuDesktopApp
+        TanuDesktopApp(
+            host="127.0.0.1", port=port, display_mode=mode, cfg=cfg
+        ).run()
     except KeyboardInterrupt:
         print()
     except (FileNotFoundError, PermissionError) as e:

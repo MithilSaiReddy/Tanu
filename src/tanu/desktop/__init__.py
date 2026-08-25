@@ -1,10 +1,33 @@
 """
-tanu.desktop — Pygame desktop UI for Tanu.
+tanu.desktop — desktop UI for Tanu.
 
-Replaces the Godot 4 client. Connects to the Tanu server over WebSocket
-and renders the animated character face + chat interface.
+Two panel drivers:
+  - LVGL (native C binary): default for SBC panel mode, no Python deps
+  - Pygame: window mode and legacy fbcon panel mode
 """
 
-from .app import TanuDesktopApp, run_app
+from .panel import (
+    resolve_display_mode,
+    get_panel_cfg,
+    get_lvgl_binary_path,
+    apply_panel_env,
+    apply_lvgl_env,
+)
 
-__all__ = ["TanuDesktopApp", "run_app"]
+
+def run_app(host="127.0.0.1", port=7337, display_mode="window", cfg=None):
+    """Lazy import to avoid requiring pygame when using LVGL driver."""
+    from .app import TanuDesktopApp
+    return TanuDesktopApp(
+        host=host, port=port, display_mode=display_mode, cfg=cfg
+    ).run()
+
+
+__all__ = [
+    "run_app",
+    "resolve_display_mode",
+    "get_panel_cfg",
+    "get_lvgl_binary_path",
+    "apply_panel_env",
+    "apply_lvgl_env",
+]
