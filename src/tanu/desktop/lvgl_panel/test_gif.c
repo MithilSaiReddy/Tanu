@@ -41,17 +41,12 @@ int main(void) {
         lv_label_set_text(label, "GIF: create failed");
     } else {
         lv_gif_set_color_format(gif, LV_COLOR_FORMAT_RGB565);
-        lv_result_t res = lv_gif_set_src(gif, "S:character.gif");
-        printf("lv_gif_set_src returned: %d\n", res);
+        lv_gif_set_src(gif, "S:character.gif");
+        printf("lv_gif_set_src called\n");
         fflush(stdout);
 
-        if (res != LV_RESULT_OK) {
-            printf("ERROR: lv_gif_set_src failed (res=%d)\n", res);
-            lv_label_set_text(label, "GIF: load failed");
-        } else {
-            lv_obj_align(gif, LV_ALIGN_CENTER, 0, 0);
-            lv_label_set_text(label, "GIF loaded OK");
-        }
+        lv_obj_align(gif, LV_ALIGN_CENTER, 0, 0);
+        lv_label_set_text(label, "GIF set OK");
     }
 
     /* Also test: can we open the file directly? */
