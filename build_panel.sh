@@ -29,19 +29,37 @@ echo "  Work dir:   ${WORK_DIR}"
 echo "  LVGL dir:   ${LVGL_DIR}"
 echo "  Panel src:  ${SRC_FILE}"
 
-# ── Step 1: Clone lv_port_linux if needed ──────────────────────────────────
+# ── Step 1: Clone/recent lv_port_linux ─────────────────────────────────────
 if [ ! -d "${LVGL_DIR}" ]; then
     echo ""
     echo "--- Cloning lv_port_linux ---"
     mkdir -p "${WORK_DIR}"
-    cd "${WORK_DIR}"
-    git clone --recurse-submodules https://github.com/lvgl/lv_port_linux.git
+    git clone --recurse-submodules https://github.com/lvgl/lv_port_linux.git "${LVGL_DIR}"
 fi
+
+cd "${LVGL_DIR}"
+echo "--- Updating lv_port_linux to latest LVGL ---"
+git fetch --tags --force origin
+LATEST_TAG=$(git tag -l 'v9.*' | sort -V | tail -1)
+if [ -n "${LATEST_TAG}" ]; then
+    echo "Checking out latest LVGL release: ${LATEST_TAG}"
+    git checkout -f "${LATEST_TAG}"
+else
+    echo "No v9.* tags found — using master"
+    git checkout -f master
+fi
+git submodule update --init --recursive
 
 # ── Step 2: Configure and build LVGL ──────────────────────────────────────
 echo ""
 echo "--- Configuring LVGL (lv_conf.h, fbdev only) ---"
 cd "${LVGL_DIR}"
+
+grep -m1 "LVGL_VERSION_MAJOR\|LVGL_VERSION_MINOR\|LVGL_VERSION_PATCH" \
+    "${LVGL_DIR}/lvgl/lv_version.h" 2>/dev/null \
+    || grep -rm1 "LVGL_VERSION_MAJOR\|LVGL_VERSION_MINOR\|LVGL_VERSION_PATCH" \
+    "${LVGL_DIR}/lvgl/src/lv_conf_internal.h" 2>/dev/null \
+    || echo "LVGL version unknown"
 
 # Clean build dir to ensure fresh config
 rm -rf build

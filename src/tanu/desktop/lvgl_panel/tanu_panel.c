@@ -163,17 +163,20 @@ static void create_ui(void) {
     lv_obj_align(response_label, LV_ALIGN_BOTTOM_LEFT, pad, -pad);
     printf("[UI] response_label OK\n"); fflush(stdout);
 
-    /* Character GIF — test if lv_gif_create works at all */
+    /* Character GIF — below status bar, scaled down to fit the 320x240 panel */
     printf("[UI] step1: lv_gif_create...\n"); fflush(stdout);
     face_gif = lv_gif_create(scr);
     printf("[UI] step1 result: %p\n", (void*)face_gif); fflush(stdout);
     if (face_gif) {
-        printf("[UI] step2: setting color format RGB565...\n"); fflush(stdout);
-        lv_gif_set_color_format(face_gif, LV_COLOR_FORMAT_RGB565);
+        printf("[UI] step2: setting color format ARGB8888...\n"); fflush(stdout);
+        lv_gif_set_color_format(face_gif, LV_COLOR_FORMAT_ARGB8888);
         printf("[UI] step2 done\n"); fflush(stdout);
         printf("[UI] step3: setting src...\n"); fflush(stdout);
         lv_gif_set_src(face_gif, &gif_character);
         printf("[UI] step3 done\n"); fflush(stdout);
+
+        lv_obj_set_size(face_gif, scr_w - pad * 2, 224);
+        lv_image_set_scale(face_gif, 160); /* 320x320 source scaled to ~62% (256 = 100%) */
         lv_obj_align(face_gif, LV_ALIGN_TOP_MID, 0, STATUS_BAR_H + pad * 2);
         printf("[UI] step4 aligned\n"); fflush(stdout);
     } else {
