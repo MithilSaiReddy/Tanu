@@ -29,7 +29,11 @@ echo "  Work dir:   ${WORK_DIR}"
 echo "  LVGL dir:   ${LVGL_DIR}"
 echo "  Panel src:  ${SRC_FILE}"
 
-# ── Step 1: Clone/recent lv_port_linux ─────────────────────────────────────
+# ── Step 1: Clone/update lv_port_linux + pin LVGL release ──────────────────
+# lv_port_linux only tags up to v9.2.2; all releases flow through master.
+# The actual LVGL library is the lvgl submodule, which we pin to a release tag.
+LV_GL_TAG="${LV_GL_TAG:-v9.5.0}"
+
 if [ ! -d "${LVGL_DIR}" ]; then
     echo ""
     echo "--- Cloning lv_port_linux ---"
@@ -38,21 +42,18 @@ if [ ! -d "${LVGL_DIR}" ]; then
 fi
 
 cd "${LVGL_DIR}"
-echo "--- Updating lv_port_linux to latest LVGL ---"
-git fetch --tags --force origin
-LATEST_TAG=$(git tag -l 'v9.*' | sort -V | tail -1)
-if [ -n "${LATEST_TAG}" ]; then
-    echo "Checking out latest LVGL release: ${LATEST_TAG}"
-    git checkout -f "${LATEST_TAG}"
-else
-    echo "No v9.* tags found — using master"
-    git checkout -f master
-fi
+echo "--- Updating lv_port_linux to latest (master) ---"
+git fetch origin
+git checkout -f master
 git submodule update --init --recursive
+
+echo "--- Pinning lvgl submodule to release ${LV_GL_TAG} ---"
+git -C lvgl fetch --tags --force origin
+git -C lvgl checkout -f "${LV_GL_TAG}"
 
 # ── Step 2: Configure and build LVGL ──────────────────────────────────────
 echo ""
-echo "--- Configuring LVGL (lv_conf.h, fbdev only) ---"
+echo "--- Configuring LVGL (Kconfig, fbdev only) ---"
 cd "${LVGL_DIR}"
 
 grep -m1 "LVGL_VERSION_MAJOR\|LVGL_VERSION_MINOR\|LVGL_VERSION_PATCH" \
@@ -64,43 +65,32 @@ grep -m1 "LVGL_VERSION_MAJOR\|LVGL_VERSION_MINOR\|LVGL_VERSION_PATCH" \
 # Clean build dir to ensure fresh config
 rm -rf build
 
-# Create lv_conf.h for non-Kconfig build
-cat > lv_conf.h << 'LVEOF'
-#ifndef LV_CONF_H
-#define LV_CONF_H
+# Create .config for the Kconfig build (lv_port_linux master forces Kconfig on)
+cat > .config << 'LVEOF'
+# LVGL
+CONFIG_LV_COLOR_DEPTH_16=y
+CONFIG_LV_FONT_MONTSERRAT_14=y
+CONFIG_LV_FONT_MONTSERRAT_20=y
+CONFIG_LV_FONT_MONTSERRAT_28=y
+CONFIG_LV_FONT_DEFAULT_MONTSERRAT_20=y
+CONFIG_LV_USE_GIF=y
+CONFIG_LV_GIF_CACHE_DECODE_DATA=y
+CONFIG_LV_USE_LINUX_FBDEV=y
 
-#include <stdint.h>
-
-/* Color */
-#define LV_COLOR_DEPTH 16
-
-/* Fonts */
-#define LV_FONT_MONTSERRAT_14 1
-#define LV_FONT_MONTSERRAT_20 1
-#define LV_FONT_MONTSERRAT_28 1
-#define LV_FONT_DEFAULT &lv_font_montserrat_20
-
-/* Libraries */
-#define LV_USE_GIF 1
-#define LV_USE_FS_STDIO 0
-
-/* Demos */
-#define LV_USE_DEMO_WIDGETS 0
-
-#endif /* LV_CONF_H */
+# Demo/desktop backends we do NOT want on the SBC
+CONFIG_LV_USE_SDL=n
+CONFIG_LV_USE_WAYLAND=n
+CONFIG_LV_USE_X11=n
+CONFIG_LV_USE_DEMO_WIDGETS=n
 LVEOF
 
 echo "Building LVGL core + fbdev backend..."
 if command -v ninja &>/dev/null; then
     cmake -B build -GNinja -DCMAKE_BUILD_TYPE=Release \
-        -DLV_BUILD_USE_KCONFIG=OFF \
-        -DLV_CONF_PATH=lv_conf.h \
         2>&1 | tail -10
     cmake --build build --target lvgl_linux -j"$(nproc)" 2>&1 | tail -10
 else
     cmake -B build -DCMAKE_BUILD_TYPE=Release \
-        -DLV_BUILD_USE_KCONFIG=OFF \
-        -DLV_CONF_PATH=lv_conf.h \
         2>&1 | tail -10
     cmake --build build --target lvgl_linux -j"$(nproc)" 2>&1 | tail -10
 fi
