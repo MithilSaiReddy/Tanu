@@ -45,6 +45,10 @@ realtimesst.log
 # --- Script artifacts ---
 test_deskbot.sh
 
+# --- LVGL panel generated animation frames (build_panel.sh) ---
+src/tanu/desktop/lvgl_panel/generated/
+src/tanu/desktop/lvgl_panel/tanu_face_frames.h
+
 # --- MkDocs ---
 /site
 
