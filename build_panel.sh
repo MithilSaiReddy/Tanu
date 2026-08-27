@@ -84,6 +84,9 @@ CONFIG_LV_USE_X11=n
 CONFIG_LV_USE_DEMO_WIDGETS=n
 LVEOF
 
+# lvgl v9.5.0's kconfig.cmake only reads .config from the lvgl source dir
+cp .config lvgl/.config
+
 echo "Building LVGL core + fbdev backend..."
 if command -v ninja &>/dev/null; then
     cmake -B build -GNinja -DCMAKE_BUILD_TYPE=Release \
