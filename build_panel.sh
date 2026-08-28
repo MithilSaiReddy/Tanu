@@ -30,10 +30,31 @@ echo "  Work dir:   ${WORK_DIR}"
 echo "  LVGL dir:   ${LVGL_DIR}"
 echo "  Panel src:  ${SRC_FILE}"
 
+# ── Step 0: Decide whether we even need to touch LVGL ───────────────────────
+# LVGL itself only needs to be rebuilt once (or when LV_GL_TAG changes / you
+# edit lv_conf). Recompiling it from source every run is what makes builds
+# feel "heavy" — skip it automatically once it's already installed.
+LV_GL_TAG="${LV_GL_TAG:-v9.5.0}"
+FORCE_LVGL_REBUILD="${FORCE_LVGL_REBUILD:-0}"   # set to 1 to force a full LVGL rebuild
+LVGL_STAMP="${WORK_DIR}/.lvgl_build_stamp"       # records which tag is currently installed
+
+NEED_LVGL_BUILD=1
+if [ "${FORCE_LVGL_REBUILD}" != "1" ] \
+   && [ -f "/usr/local/lib/liblvgl.a" -o -f "/usr/local/lib/liblvgl.so" ] \
+   && [ -f "${LVGL_STAMP}" ] \
+   && [ "$(cat "${LVGL_STAMP}")" = "${LV_GL_TAG}" ]; then
+    NEED_LVGL_BUILD=0
+    echo ""
+    echo "--- LVGL ${LV_GL_TAG} already installed, skipping clone/build (set FORCE_LVGL_REBUILD=1 to override) ---"
+fi
+
+PYTHON3="${PYTHON3:-python3}"
+
+if [ "${NEED_LVGL_BUILD}" = "1" ]; then
+
 # ── Step 1: Clone/update lv_port_linux + pin LVGL release ──────────────────
 # lv_port_linux only tags up to v9.2.2; all releases flow through master.
 # The actual LVGL library is the lvgl submodule, which we pin to a release tag.
-LV_GL_TAG="${LV_GL_TAG:-v9.5.0}"
 
 if [ ! -d "${LVGL_DIR}" ]; then
     echo ""
@@ -57,7 +78,6 @@ git -C lvgl checkout -f "${LV_GL_TAG}"
 # GIF->PNG frame extraction. Install into whatever python3 is active.
 echo ""
 echo "--- Ensuring Python build deps (kconfiglib pcpp pypng lz4 pillow) ---"
-PYTHON3="${PYTHON3:-python3}"
 if ! ${PYTHON3} -c "import kconfiglib, pcpp, png, lz4, PIL" 2>/dev/null; then
     ${PYTHON3} -m pip install --quiet kconfiglib pcpp pypng lz4 pillow ||
         ${PYTHON3} -m pip install --quiet --user kconfiglib pcpp pypng lz4 pillow ||
@@ -119,7 +139,10 @@ echo ""
 echo "--- Installing LVGL to /usr/local ---"
 sudo cmake --install ./build 2>&1 | tail -10
 
-echo "LVGL install done."
+echo "${LV_GL_TAG}" > "${LVGL_STAMP}"
+echo "LVGL install done (stamped ${LV_GL_TAG} at ${LVGL_STAMP})."
+
+fi  # NEED_LVGL_BUILD
 
 # ── Step 4: Extract animation frames into RGB565 C arrays ─────────────────
 echo ""
