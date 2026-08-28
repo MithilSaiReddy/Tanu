@@ -116,6 +116,8 @@ DEFAULT_CONFIG = {
             "fps": 24,
             "speed": 1.0,
             "rotation": 0,
+            "vsync": False,
+            "show_fps": False,
             "driver": "fbdev",
         },
     },

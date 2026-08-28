@@ -36,6 +36,8 @@ Config lives under `ui` in `~/.tanu/config.json` (defaults shown):
       "fps": 24,
       "speed": 1.0,
       "rotation": 0,
+      "vsync": false,
+      "show_fps": false,
       "driver": "fbdev"
     }
   }
@@ -45,7 +47,15 @@ Config lives under `ui` in `~/.tanu/config.json` (defaults shown):
 - `driver` is always `"fbdev"` (pure-Python, Pillow → `/dev/fb0`).
 - `rotation` (`0/90/180/270`) rotates the rendered frame before writing.
 - `speed` (default `1.0`) multiplies the face-animation playback rate. Set
-  `> 1` to play faster (e.g. `2.0` = twice as fast); the animation loops.
+  `> 1` to play faster (e.g. `2.0` = twice as fast); the animation loops. The
+  render pipeline is fast enough for 100+ fps on the low-level bulk write path,
+  so raising `speed` up to ~4 keeps playback smooth.
+- `vsync` (default `false`) — if `true`, tries to enable double buffering via
+  `FBIOPAN_DISPLAY` when the fb driver advertises `yres_virtual >= 2*yres`.
+  This pans between two pages for tear-free updates; falls back silently to
+  single buffering if the driver can't honour it.
+- `show_fps` (default `false`) — if `true`, logs the measured panel frame rate
+  every 5 s to tune `speed`/`fps` against the real display.
 - Set `"display": "panel"` to make `desk` use the panel without the flag.
 
 ## 2. Panel wiring (ILI9341 → SBC header)

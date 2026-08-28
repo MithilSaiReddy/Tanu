@@ -29,6 +29,11 @@ LOG = logging.getLogger(__name__)
 
 FBIOGET_VSCREENINFO = 0x4600
 FBIOGET_FSCREENINFO = 0x4602
+FBIO_PAN_DISPLAY    = 0x4619
+
+# fb_var_screeninfo activate flags used for double-buffered panning.
+FB_ACTIVATE_NOW     = 0
+FB_ACTIVATE_VBL     = 16
 
 # State -> accent colour used for the status line / border.
 STATE_COLORS = {
@@ -96,6 +101,8 @@ class FbdevPanel:
         self._fps = int(cfg.get("fps", 24))
         self._speed = float(cfg.get("speed", 1.0)) or 1.0
         self._rotation = int(cfg.get("rotation", 0)) % 360
+        self._vsync = bool(cfg.get("vsync", False))
+        self._show_fps = bool(cfg.get("show_fps", False))
         self._ws_url = ws_url
 
         # Prefer the source GIF; fall back to a directory of pre-split PNGs.
@@ -120,6 +127,12 @@ class FbdevPanel:
         self._fb_bpp = 0
         self._line_length = 0
         self._smem_len = 0
+        self._fb_var = b"\0" * 160
+
+        self._font = self._load_font()
+        self._double_buffered = False
+        self._pan_supported = False
+        self._current_page = 0
 
         self._open_framebuffer()
         self._load_frames()
@@ -145,6 +158,7 @@ class FbdevPanel:
 
         xres, yres, xres_v, yres_v, bpp = _struct_screeninfo(var)
         self._line_length, self._smem_len = _struct_fixinfo(fix)
+        self._fb_var = var
         if xres_v > 0:
             xres = xres_v
         if yres_v > 0:
@@ -169,6 +183,9 @@ class FbdevPanel:
         self._fb_map = mmap.mmap(self._fb_fd, size)
         LOG.info("Mapped %s (%dx%d, %d bpp, pitch %d, smem %d B)",
                  self._device, xres, yres, bpp, self._line_length, self._smem_len)
+
+        if self._vsync:
+            self._try_enable_double_buffer()
 
     # ── frames ─────────────────────────────────────────────────────────────
 
@@ -257,15 +274,39 @@ class FbdevPanel:
     # ── render loop ────────────────────────────────────────────────────────
 
     def _loop(self) -> None:
+        if not self._durations:
+            return
+        # Steady cadence clock: schedule each frame on an absolute monotonic
+        # timeline, advancing by that frame's hold time. The average rate stays
+        # exact (and jitter-free) even if a single render stalls.
+        next_t = time.monotonic()
+        last_log = time.monotonic()
+        log_frames = 0
+
         while not self._stop.is_set():
-            start = time.time()
+            delay = next_t - time.monotonic()
+            if delay > 0:
+                if self._stop.wait(delay):
+                    break
             self._render()
-            # duration of the frame that was just drawn (render increments _frame_idx)
+            # duration of the frame that was just drawn (render advanced idx);
+            # the NEXT frame is scheduled that far out.
             just_shown = (self._frame_idx - 1) % len(self._durations)
-            hold = self._durations[just_shown]
-            elapsed = time.time() - start
-            if hold > elapsed:
-                self._stop.wait(hold - elapsed)
+            next_t += self._durations[just_shown]
+            if next_t < time.monotonic() - 1.0:
+                # Fell far behind (e.g. display choked); resync so we don't
+                # spin in a catch-up burst.
+                next_t = time.monotonic()
+
+            if self._show_fps:
+                log_frames += 1
+                now = time.monotonic()
+                if now - last_log >= 5.0:
+                    LOG.info("panel fps: %.1f (%d frames in %.1fs)",
+                             log_frames / (now - last_log), log_frames,
+                             now - last_log)
+                    last_log = now
+                    log_frames = 0
 
     def _render(self) -> None:
         with self._lock:
@@ -295,6 +336,10 @@ class FbdevPanel:
             self._overlay_text(status, (6, 6), accent)
         self._overlay_text(response, (6, self._cfg_h - 22), (0xBB, 0xBB, 0xBB))
 
+        if self._pan_supported:
+            self._pan_page(self._current_page)
+            self._current_page = 1 - self._current_page
+
     @staticmethod
     def _rotate(image: Image.Image, angle: int) -> Image.Image:
         if angle == 90:
@@ -322,13 +367,18 @@ class FbdevPanel:
         w_bytes = min(self._cfg_w * 2, pitch, self._smem_len - x * 2)
         rows = min(tmp.height, self._fb_height - y,
                    max(self._smem_len // max(pitch, 1) - y, 0))
+        base = self._back_page_offset()
         for r in range(rows):
             row = data[r * self._cfg_w * 2:(r * self._cfg_w * 2) + w_bytes]
-            offset = (y + r) * pitch + x * 2
+            offset = (y + r) * pitch + x * 2 + base
             if offset + w_bytes <= self._smem_len:
                 self._fb_map[offset:offset + w_bytes] = row
 
     def _small_font(self):
+        return self._font
+
+    @staticmethod
+    def _load_font():
         try:
             path = Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")
             if path.exists():
@@ -337,17 +387,79 @@ class FbdevPanel:
             pass
         return ImageFont.load_default()
 
+    # ── vsync / double buffering (best-effort) ─────────────────────────────
+
+    def _try_enable_double_buffer(self) -> None:
+        """Double-buffer via yres_virtual > yres + FBIOPAN_DISPLAY, if the
+        driver supports it. Falls back silently to single-buffered writes."""
+        xres, yres, xres_v, yres_v, bpp = _struct_screeninfo(self._fb_var)
+        line_bytes = self._line_length * yres
+        if xres_v > 0 and yres_v >= 2 * yres and self._smem_len >= 2 * line_bytes:
+            # Try to request a virtual height of two pages so we can pan
+            # between framebuffers (tear-free) — only if the driver honours it.
+            var = bytearray(self._fb_var)
+            struct.pack_into("=I", var, 12, 2 * yres)   # yres_virtual
+            struct.pack_into("=I", var, 84, FB_ACTIVATE_VBL)  # activate flag
+            try:
+                fcntl.ioctl(self._fb_fd, 0x4601, var)  # FBIOPUT_VSCREENINFO
+            except OSError:
+                pass
+            else:
+                # Remap to cover both pages so we can write a full frame into
+                # the back buffer, then pan to it (tear-free).
+                try:
+                    self._fb_map.close()
+                    two = min(self._line_length * yres * 2, self._smem_len)
+                    self._fb_map = mmap.mmap(self._fb_fd, two)
+                except (OSError, ValueError):
+                    self._fb_map = mmap.mmap(self._fb_fd, self._line_length * yres)
+                    self._double_buffered = False
+                else:
+                    self._double_buffered = True
+                    self._pan_supported = True
+                    self._current_page = 0
+                    LOG.info("Double buffering enabled (2 x %d B)", line_bytes)
+                    return
+        LOG.info("fb does not support double buffering; using single buffer")
+
+    def _pan_page(self, page: int) -> None:
+        """Pan the display to page 0 or 1 (double buffered) or no-op."""
+        if not self._pan_supported:
+            return
+        var = bytearray(self._fb_var)
+        struct.pack_into("=I", var, 20, page * self._fb_height)  # yoffset
+        struct.pack_into("=I", var, 84, FB_ACTIVATE_NOW)
+        try:
+            fcntl.ioctl(self._fb_fd, 0x4619, var)
+        except OSError:
+            pass
+
+    def _back_page_offset(self) -> int:
+        """Byte offset of the (hidden) page we should write this frame into."""
+        if not self._double_buffered:
+            return 0
+        page = 1 - self._current_page
+        return page * self._line_length * self._fb_height
+
     def _blit_bytes(self, data: bytes, width: int | None = None,
-                    height: int | None = None) -> None:
+                    height: int | None = None, page_off: int | None = None) -> None:
         w = width or self._cfg_w
         h = height or self._cfg_h
         w_bytes = w * 2
         pitch = min(self._line_length, self._smem_len // max(self._fb_height, 1))
         rows = min(h, self._fb_height, self._smem_len // max(pitch, 1))
-        for y in range(rows):
-            row = data[y * w_bytes:(y + 1) * w_bytes]
-            offset = min(y * pitch, self._smem_len - w_bytes)
-            self._fb_map[offset:offset + w_bytes] = row
+        base = page_off if page_off is not None else self._back_page_offset()
+        if pitch == w_bytes:
+            # Tightly packed — write the whole frame in one bus transaction
+            # (atomic-ish, minimal SPI chatter, no per-row overhead).
+            n = min(rows * w_bytes, self._smem_len - base)
+            self._fb_map[base:base + n] = data[:n]
+        else:
+            for y in range(rows):
+                row = data[y * w_bytes:(y + 1) * w_bytes]
+                offset = min(y * pitch, self._smem_len - w_bytes) + base
+                if offset + w_bytes <= self._smem_len:
+                    self._fb_map[offset:offset + w_bytes] = row
 
     def _blit(self, image: Image.Image) -> None:
         self._blit_bytes(_convert_frame_to_rgb565(image), image.width, image.height)
