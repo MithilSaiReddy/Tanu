@@ -8,6 +8,8 @@ sounddevice
 piper-tts
 pygame-ce
 websocket-client
+Pillow
+numpy
 
 # Optional: Wake word detection
 openwakeword

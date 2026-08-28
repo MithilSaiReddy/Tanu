@@ -171,14 +171,12 @@ def cmd_desk(args):
     from tanu.config import load_config
     from tanu.desktop.panel import (
         get_panel_cfg,
-        get_lvgl_binary_path,
-        apply_lvgl_env,
         resolve_display_mode,
     )
     cfg = load_config()
     mode = resolve_display_mode(getattr(args, "panel", False), cfg)
     panel_cfg = get_panel_cfg(cfg) if mode == "panel" else {}
-    driver = panel_cfg.get("driver", "lvgl") if mode == "panel" else "pygame"
+    driver = "fbdev" if mode == "panel" else "window"
 
     print("Starting server + desktop app...")
     print(f"   Server:  http://localhost:{port}")
@@ -194,28 +192,19 @@ def cmd_desk(args):
     server_proc = multiprocessing.Process(target=_run_server, args=(port,), daemon=True)
     server_proc.start()
 
-    if mode == "panel" and driver == "lvgl":
-        _run_lvgl_panel(port, cfg, panel_cfg, server_proc)
+    if mode == "panel":
+        _run_fbdev_panel(port, cfg, panel_cfg, server_proc)
     else:
         _run_pygame_desk(port, mode, cfg, server_proc)
 
 
-def _run_lvgl_panel(port, cfg, panel_cfg, server_proc):
-    """Launch the LVGL binary for panel rendering."""
-    import subprocess
+def _run_fbdev_panel(port, cfg, panel_cfg, server_proc):
+    """Run the pure-Python fbdev panel (Pillow -> /dev/fb0) in-process."""
+    from tanu.desktop.fbdev_panel import run_panel
+    from tanu.desktop.panel import _validate_framebuffer
 
-    from tanu.desktop.panel import apply_lvgl_env, get_lvgl_binary_path
-
-    lvgl_bin = get_lvgl_binary_path()
-    if not lvgl_bin:
-        print("\nLVGL panel binary not found.")
-        print("   Build it: see docs/content/guide/sbc-panel.md#lvgl-panel")
-        server_proc.terminate()
-        raise SystemExit(1)
-
-    apply_lvgl_env(panel_cfg)
+    _validate_framebuffer(panel_cfg.get("device", "/dev/fb0"))
     ws_url = f"ws://127.0.0.1:{port}/ws/chat"
-    print(f"   LVGL:   {lvgl_bin}")
 
     def _shutdown(sig=None, frame=None):
         raise SystemExit(0)
@@ -223,18 +212,8 @@ def _run_lvgl_panel(port, cfg, panel_cfg, server_proc):
     signal.signal(signal.SIGINT, _shutdown)
     signal.signal(signal.SIGTERM, _shutdown)
 
-    exit_code = 0
     try:
-        subprocess.run(
-            [lvgl_bin, "--ws-url", ws_url],
-            check=True,
-        )
-    except FileNotFoundError:
-        print(f"\nLVGL binary not found at {lvgl_bin}")
-        exit_code = 1
-    except subprocess.CalledProcessError as e:
-        print(f"\nLVGL panel exited with code {e.returncode}")
-        exit_code = e.returncode
+        run_panel(panel_cfg, ws_url)
     except KeyboardInterrupt:
         pass
     finally:
@@ -246,9 +225,6 @@ def _run_lvgl_panel(port, cfg, panel_cfg, server_proc):
             pass
         if server_proc.is_alive():
             server_proc.kill()
-
-    if exit_code:
-        raise SystemExit(exit_code)
 
 
 def _run_pygame_desk(port, mode, cfg, server_proc):

@@ -31,6 +31,8 @@ dependencies = [
     "piper-tts",
     "pygame-ce",
     "websocket-client",
+    "Pillow",
+    "numpy",
 ]
 
 [project.optional-dependencies]
