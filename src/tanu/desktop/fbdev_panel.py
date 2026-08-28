@@ -53,14 +53,19 @@ def _struct_screeninfo(buf: bytes) -> tuple[int, int, int, int, int]:
     return vals[0], vals[1], vals[2], vals[3], vals[6]
 
 
-def _struct_fixinfo(buf: bytes) -> int:
-    """Parse fb_fix_screeninfo and return line_length (bytes per scanline).
+def _struct_fixinfo(buf: bytes) -> tuple[int, int]:
+    """Parse fb_fix_screeninfo: return (line_length, smem_len).
 
-    fb_fix_screeninfo layout: id[16], smem_start(8), smem_len, type,
-    type_aux, visual, xpanstep, ypanstep, ywrapstep, line_length ...
-    so line_length sits at byte offset 46.
+    fb_fix_screeninfo layout (u32-aligned):
+      id[16], smem_start(8), smem_len, type, type_aux, visual   -> offsets 0..39
+      xpanstep, ypanstep, ywrapstep (u16)                       -> 40..45
+      2 bytes padding (natural u32 alignment)                   -> 46..47
+      line_length (u32)                                         -> 48..51
+    So smem_len is at offset 24 and line_length at byte offset 48.
     """
-    return struct.unpack_from("=I", buf, 46)[0]
+    smem_len = struct.unpack_from("=I", buf, 24)[0]
+    line_length = struct.unpack_from("=I", buf, 48)[0]
+    return line_length, smem_len
 
 
 def _rgb888_to_rgb565(r: int, g: int, b: int) -> int:
@@ -114,6 +119,7 @@ class FbdevPanel:
         self._fb_height = 0
         self._fb_bpp = 0
         self._line_length = 0
+        self._smem_len = 0
 
         self._open_framebuffer()
         self._load_frames()
@@ -138,7 +144,7 @@ class FbdevPanel:
             raise
 
         xres, yres, xres_v, yres_v, bpp = _struct_screeninfo(var)
-        self._line_length = _struct_fixinfo(fix)
+        self._line_length, self._smem_len = _struct_fixinfo(fix)
         if xres_v > 0:
             xres = xres_v
         if yres_v > 0:
@@ -156,10 +162,13 @@ class FbdevPanel:
                 self._device, xres, yres, bpp, self._cfg_w, self._cfg_h,
             )
 
-        size = self._line_length * self._fb_height
+        # Map only what the hardware actually backs: clamp to smem_len so a
+        # mis-parsed/huge line_length (or virtual geometry larger than the
+        # real fb) can never cause a SIGBUS by writing past the buffer.
+        size = min(self._line_length * self._fb_height, self._smem_len)
         self._fb_map = mmap.mmap(self._fb_fd, size)
-        LOG.info("Mapped %s (%dx%d, %d bpp, pitch %d)", self._device,
-                 xres, yres, bpp, self._line_length)
+        LOG.info("Mapped %s (%dx%d, %d bpp, pitch %d, smem %d B)",
+                 self._device, xres, yres, bpp, self._line_length, self._smem_len)
 
     # ── frames ─────────────────────────────────────────────────────────────
 
@@ -276,9 +285,13 @@ class FbdevPanel:
     def _blit(self, image: Image.Image) -> None:
         data = _convert_frame_to_rgb565(image)
         w_bytes = image.width * 2
-        for y in range(image.height):
+        # Clamp pitch/rows to the actual mapped size so we can never write
+        # past smem_len (would otherwise SIGBUS on a small/tight framebuffer).
+        pitch = min(self._line_length, self._smem_len // max(self._fb_height, 1))
+        rows = min(image.height, self._fb_height, self._smem_len // max(pitch, 1))
+        for y in range(rows):
             row = data[y * w_bytes:(y + 1) * w_bytes]
-            offset = y * self._line_length
+            offset = min(y * pitch, self._smem_len - w_bytes)
             self._fb_map[offset:offset + w_bytes] = row
 
 
