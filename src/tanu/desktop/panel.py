@@ -16,6 +16,7 @@ DEFAULT_PANEL = {
     "width": 320,
     "height": 240,
     "fps": 24,
+    "speed": 1.0,
     "rotation": 0,
     "driver": "fbdev",
 }
@@ -36,6 +37,8 @@ def get_panel_cfg(cfg: dict) -> dict:
         panel["height"] = int(panel["height"])
         panel["fps"] = int(panel["fps"])
         panel["rotation"] = int(panel["rotation"]) % 360
+        speed = float(panel.get("speed", 1.0))
+        panel["speed"] = speed if speed > 0 else 1.0
     except (KeyError, TypeError, ValueError):
         pass
     if panel["rotation"] not in (0, 90, 180, 270):

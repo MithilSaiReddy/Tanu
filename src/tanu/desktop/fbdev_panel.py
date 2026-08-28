@@ -68,10 +68,6 @@ def _struct_fixinfo(buf: bytes) -> tuple[int, int]:
     return line_length, smem_len
 
 
-def _rgb888_to_rgb565(r: int, g: int, b: int) -> int:
-    return ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)
-
-
 def _convert_frame_to_rgb565(image: Image.Image) -> bytes:
     """Return packed RGB565 bytes for a full RGB image (no pitch padding)."""
     rgb = image.convert("RGB")
@@ -82,7 +78,7 @@ def _convert_frame_to_rgb565(image: Image.Image) -> bytes:
     for y in range(h):
         for x in range(w):
             r, g, b = px[x, y]
-            val = _rgb888_to_rgb565(r, g, b)
+            val = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)
             out[i] = val & 0xFF
             out[i + 1] = (val >> 8) & 0xFF
             i += 2
@@ -92,19 +88,23 @@ def _convert_frame_to_rgb565(image: Image.Image) -> bytes:
 class FbdevPanel:
     """Animate the Tanu face to a Linux framebuffer and drive it over WS."""
 
-    def __init__(self, cfg: dict, asset_dir: Optional[Path] = None,
+    def __init__(self, cfg: dict, asset: Optional[Path] = None,
                  ws_url: str = "ws://127.0.0.1:7337/ws/chat"):
         self._device = cfg.get("device", "/dev/fb0")
         self._cfg_w = int(cfg.get("width", 320))
         self._cfg_h = int(cfg.get("height", 240))
         self._fps = int(cfg.get("fps", 24))
+        self._speed = float(cfg.get("speed", 1.0)) or 1.0
         self._rotation = int(cfg.get("rotation", 0)) % 360
         self._ws_url = ws_url
 
-        self._asset_dir = Path(asset_dir) if asset_dir is not None else (
-            Path(__file__).resolve().parent.parent / "assets" / "idle"
+        # Prefer the source GIF; fall back to a directory of pre-split PNGs.
+        self._asset = Path(asset) if asset is not None else (
+            Path(__file__).resolve().parent.parent / "assets" / "idle.gif"
         )
         self._frames: list[Image.Image] = []
+        self._durations: list[float] = []
+        self._frame_rgb: list[bytes] = []
         self._state = "idle"
         self._status = "Connecting..."
         self._response = "Waiting for server..."
@@ -173,19 +173,50 @@ class FbdevPanel:
     # ── frames ─────────────────────────────────────────────────────────────
 
     def _load_frames(self) -> None:
-        pngs = sorted(self._asset_dir.glob("frame_*.png"))
-        if not pngs:
+        asset = self._asset
+        frames: list[Image.Image] = []
+        durations: list[float] = []
+
+        if asset.is_dir():
+            for p in sorted(asset.glob("frame_*.png")):
+                frames.append(Image.open(p))
+        elif asset.is_file() and asset.suffix.lower() in (".gif", ".png"):
+            im = Image.open(asset)
+            n = getattr(im, "n_frames", 1)
+            for i in range(n):
+                im.seek(i)
+                frames.append(im.convert("RGBA"))
+                ms = im.info.get("duration", 0) or 0
+                durations.append(ms / 1000.0)  # ms -> seconds
+        else:
             raise FileNotFoundError(
-                f"No face frames found in {self._asset_dir}. "
-                "Expected src/tanu/assets/idle/frame_*.png"
+                f"No face animation found at {asset}.\n"
+                "Expected src/tanu/assets/idle.gif or a directory of frame_*.png"
             )
-        for p in pngs:
-            im = Image.open(p).convert("RGBA")
-            if im.size != (self._cfg_w, self._cfg_h):
-                im = im.resize((self._cfg_w, self._cfg_h), Image.Resampling.LANCZOS)
-            bg = Image.new("RGBA", im.size, DEFAULT_BG + (255,))
-            self._frames.append(Image.alpha_composite(bg, im).convert("RGB"))
-        LOG.info("Loaded %d face frames from %s", len(self._frames), self._asset_dir)
+
+        if not frames:
+            raise FileNotFoundError(f"No face frames found in {asset}.")
+
+        for im in frames:
+            rgba = im.convert("RGBA")
+            if rgba.size != (self._cfg_w, self._cfg_h):
+                rgba = rgba.resize((self._cfg_w, self._cfg_h), Image.Resampling.LANCZOS)
+            bg = Image.new("RGBA", rgba.size, DEFAULT_BG + (255,))
+            rgb = Image.alpha_composite(bg, rgba).convert("RGB")
+            self._frames.append(rgb)
+            # Pre-pack the static face once so the render loop only blits it
+            # (fast) instead of re-converting 76k pixels every frame.
+            self._frame_rgb.append(_convert_frame_to_rgb565(rgb))
+
+        # Per-frame hold time: honour the GIF's own duration if present,
+        # otherwise fall back to a constant 1/fps. speed multiplies playback.
+        if len(durations) == len(self._frames) and all(d > 0 for d in durations):
+            self._durations = [d / self._speed for d in durations]
+        else:
+            self._durations = [1.0 / max(self._fps, 1) / self._speed
+                               for _ in self._frames]
+        LOG.info("Loaded %d face frames from %s (speed x%.1f)",
+                 len(self._frames), self._asset, self._speed)
 
     # ── public API (called from WS thread) ─────────────────────────────────
 
@@ -226,13 +257,15 @@ class FbdevPanel:
     # ── render loop ────────────────────────────────────────────────────────
 
     def _loop(self) -> None:
-        interval = 1.0 / max(self._fps, 1)
         while not self._stop.is_set():
             start = time.time()
             self._render()
+            # duration of the frame that was just drawn (render increments _frame_idx)
+            just_shown = (self._frame_idx - 1) % len(self._durations)
+            hold = self._durations[just_shown]
             elapsed = time.time() - start
-            if elapsed < interval:
-                self._stop.wait(interval - elapsed)
+            if hold > elapsed:
+                self._stop.wait(hold - elapsed)
 
     def _render(self) -> None:
         with self._lock:
@@ -244,34 +277,56 @@ class FbdevPanel:
         if not self._frames:
             return
 
-        frame = self._frames[self._frame_idx % len(self._frames)]
+        idx = self._frame_idx % len(self._frames)
         self._frame_idx += 1
-        canvas = frame.copy()
 
-        draw = ImageDraw.Draw(canvas)
-        accent = STATE_COLORS.get(state, STATE_COLORS["idle"])
-
-        # status line at the top
-        if connected:
-            draw.text((6, 6), status, font=self._small_font(), fill=accent)
-        # response ticker near the bottom
-        draw.text(
-            (6, canvas.height - 22),
-            response,
-            font=self._small_font(),
-            fill=(0xBB, 0xBB, 0xBB),
-        )
-
+        # Orientation of the pre-packed face must match the text overlay, so
+        # build the final image once when rotation is active; otherwise blit
+        # the cached RGB bytes straight to the fb (no per-frame conversion).
         if self._rotation:
-            angle = self._rotation
-            if angle == 90:
-                canvas = canvas.transpose(Image.Transpose.ROTATE_270)
-            elif angle == 180:
-                canvas = canvas.transpose(Image.Transpose.ROTATE_180)
-            elif angle == 270:
-                canvas = canvas.transpose(Image.Transpose.ROTATE_90)
+            face = self._frames[idx].copy()
+            face = self._rotate(face, self._rotation)
+            self._blit(face)
+        else:
+            self._blit_bytes(self._frame_rgb[idx])
 
-        self._blit(canvas)
+        accent = STATE_COLORS.get(state, STATE_COLORS["idle"])
+        if connected:
+            self._overlay_text(status, (6, 6), accent)
+        self._overlay_text(response, (6, self._cfg_h - 22), (0xBB, 0xBB, 0xBB))
+
+    @staticmethod
+    def _rotate(image: Image.Image, angle: int) -> Image.Image:
+        if angle == 90:
+            return image.transpose(Image.Transpose.ROTATE_270)
+        if angle == 180:
+            return image.transpose(Image.Transpose.ROTATE_180)
+        if angle == 270:
+            return image.transpose(Image.Transpose.ROTATE_90)
+        return image
+
+    def _overlay_text(self, text: str, at: tuple[int, int], color: tuple[int, int, int]) -> None:
+        """Render a short text string and overwrite it onto the framebuffer."""
+        if not text:
+            return
+        font = self._small_font()
+        tmp = Image.new("RGBA", (self._cfg_w, 24), (0, 0, 0, 0))
+        ImageDraw.Draw(tmp).text((0, 0), text, font=font, fill=color + (255,))
+        data = _convert_frame_to_rgb565(tmp)
+        x, y = at
+        if x < 0:
+            x = 0
+        if y < 0:
+            y = 0
+        pitch = min(self._line_length, self._smem_len // max(self._fb_height, 1))
+        w_bytes = min(self._cfg_w * 2, pitch, self._smem_len - x * 2)
+        rows = min(tmp.height, self._fb_height - y,
+                   max(self._smem_len // max(pitch, 1) - y, 0))
+        for r in range(rows):
+            row = data[r * self._cfg_w * 2:(r * self._cfg_w * 2) + w_bytes]
+            offset = (y + r) * pitch + x * 2
+            if offset + w_bytes <= self._smem_len:
+                self._fb_map[offset:offset + w_bytes] = row
 
     def _small_font(self):
         try:
@@ -282,17 +337,20 @@ class FbdevPanel:
             pass
         return ImageFont.load_default()
 
-    def _blit(self, image: Image.Image) -> None:
-        data = _convert_frame_to_rgb565(image)
-        w_bytes = image.width * 2
-        # Clamp pitch/rows to the actual mapped size so we can never write
-        # past smem_len (would otherwise SIGBUS on a small/tight framebuffer).
+    def _blit_bytes(self, data: bytes, width: int | None = None,
+                    height: int | None = None) -> None:
+        w = width or self._cfg_w
+        h = height or self._cfg_h
+        w_bytes = w * 2
         pitch = min(self._line_length, self._smem_len // max(self._fb_height, 1))
-        rows = min(image.height, self._fb_height, self._smem_len // max(pitch, 1))
+        rows = min(h, self._fb_height, self._smem_len // max(pitch, 1))
         for y in range(rows):
             row = data[y * w_bytes:(y + 1) * w_bytes]
             offset = min(y * pitch, self._smem_len - w_bytes)
             self._fb_map[offset:offset + w_bytes] = row
+
+    def _blit(self, image: Image.Image) -> None:
+        self._blit_bytes(_convert_frame_to_rgb565(image), image.width, image.height)
 
 
 def _handle_event(panel: "FbdevPanel", data: dict) -> None:

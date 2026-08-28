@@ -34,6 +34,7 @@ Config lives under `ui` in `~/.tanu/config.json` (defaults shown):
       "width": 320,
       "height": 240,
       "fps": 24,
+      "speed": 1.0,
       "rotation": 0,
       "driver": "fbdev"
     }
@@ -43,6 +44,8 @@ Config lives under `ui` in `~/.tanu/config.json` (defaults shown):
 
 - `driver` is always `"fbdev"` (pure-Python, Pillow → `/dev/fb0`).
 - `rotation` (`0/90/180/270`) rotates the rendered frame before writing.
+- `speed` (default `1.0`) multiplies the face-animation playback rate. Set
+  `> 1` to play faster (e.g. `2.0` = twice as fast); the animation loops.
 - Set `"display": "panel"` to make `desk` use the panel without the flag.
 
 ## 2. Panel wiring (ILI9341 → SBC header)
