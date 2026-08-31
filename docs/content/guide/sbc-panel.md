@@ -16,10 +16,14 @@ writes RGB565 into the mapped framebuffer. No C, no LVGL, no build step.
 
 | Mode | Command | Output |
 |------|---------|--------|
-| Window (default) | `python3 main.py desk` | 400x400 desktop window (Pygame) |
-| Panel | `python3 main.py desk --panel` | Direct to `/dev/fb0` via Pillow |
+| Normal (no args) | `python3 main.py` | Voice assistant (simulate: type text, it speaks) + face on `/dev/fb0` |
+| Voice + panel | `python3 main.py tanu --simulate` | Type text → Tanu speaks it, face on `/dev/fb0` |
+| Chat + panel | `python3 main.py desk` | Chat server :7337 + panel (auto panel if `/dev/fb0` present) |
+| Window (dev box) | `python3 main.py desk` | 400x400 desktop window (Pygame, no `/dev/fb0`) |
 
-In panel mode the keyboard-dependent input row disappears — the UI shows
+Display selection is **auto**: the panel is used whenever a usable `/dev/fb0`
+is present (the SBC), otherwise it falls back to the Pygame window (desktop).
+In panel/voice mode the keyboard-dependent input row disappears — the UI shows
 the animated character, a status line, and a scrolling response ticker.
 Voice is the input (see §5).
 
@@ -28,7 +32,7 @@ Config lives under `ui` in `~/.tanu/config.json` (defaults shown):
 ```json
 {
   "ui": {
-    "display": "window",
+    "display": "auto",
     "panel": {
       "device": "/dev/fb0",
       "width": 320,
@@ -56,7 +60,9 @@ Config lives under `ui` in `~/.tanu/config.json` (defaults shown):
   single buffering if the driver can't honour it.
 - `show_fps` (default `false`) — if `true`, logs the measured panel frame rate
   every 5 s to tune `speed`/`fps` against the real display.
-- Set `"display": "panel"` to make `desk` use the panel without the flag.
+- `"display"` (`auto`/`window`/`panel`) — `auto` (default) selects the panel
+  when `/dev/fb0` is usable; set `"panel"` to force it, `"window"` to force
+  the Pygame window.
 
 ## 2. Panel wiring (ILI9341 → SBC header)
 
@@ -185,11 +191,19 @@ pip install Pillow numpy websocket-client
 
 ### Run
 
-From the Tanu project root (on the board), the Python launcher starts the
-chat server and the panel together:
+On the board the simplest start is the **normal run** — it auto-detects
+`/dev/fb0` and drives the panel while letting you talk to Tanu by typing
+(which it speaks through the speaker):
 
 ```bash
-python3 main.py desk --panel
+python3 main.py
+```
+
+Equivalent explicit commands:
+
+```bash
+python3 main.py tanu --simulate   # voice assistant: type text -> speaks it, face on panel
+python3 main.py desk              # chat server :7337 + panel (auto panel)
 ```
 
 Your user needs read/write access to `/dev/fb0`:
@@ -234,13 +248,24 @@ usual for voice mode (`python3 main.py tanu`).
 
 ## 7. Running everything
 
-```bash
-# Terminal/service 1 — voice brain (mic, TTS, wakeword)
-python3 main.py tanu
+On the board, one process handles voice+panel+speaker:
 
-# Terminal/service 2 — panel face (spawns chat server on :7337)
-python3 main.py desk --panel
+```bash
+# Normal run — voice assistant (simulate): type text -> Tanu speaks it,
+# face + status animated on the TFT panel
+python3 main.py
 ```
+
+If you want the mic-driven voice assistant (wake word, real STT) instead of
+typing, drop `--simulate` and enable wake word in config:
+
+```bash
+# Voice brain + panel face (mic, TTS, wakeword)
+python3 main.py tanu
+```
+
+A purely-visual `desk` chat panel (server :7337 + panel, no speaker) is still
+available with `python3 main.py desk`.
 
 ### systemd unit template
 
@@ -253,7 +278,7 @@ After=multi-user.target
 [Service]
 User=YOUR_USER
 WorkingDirectory=/opt/tanu
-ExecStart=/opt/tanu/lvenv/bin/python main.py desk --panel
+ExecStart=/opt/tanu/lvenv/bin/python main.py
 Restart=on-failure
 
 [Install]

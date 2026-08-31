@@ -24,11 +24,27 @@ DEFAULT_PANEL = {
 }
 
 
+def resolve_fb_present(cfg: dict | None = None) -> bool:
+    """True if a usable panel framebuffer (/dev/fb0) is present — i.e. the SBC
+    TFT is wired up — so we can default to panel mode / fbdev display."""
+    device = "/dev/fb0"
+    if cfg:
+        panel = (cfg.get("ui") or {}).get("panel") or {}
+        device = panel.get("device", device)
+    return os.path.exists(device) and os.access(device, os.R_OK | os.W_OK)
+
+
 def resolve_display_mode(force_panel: bool, cfg: dict) -> str:
     ui = cfg.get("ui", {}) if cfg else {}
     if force_panel:
         return "panel"
-    return ui.get("display", "window") if ui.get("display") in ("window", "panel") else "window"
+    configured = ui.get("display", "auto")
+    if configured in ("window", "panel"):
+        return configured
+    # "auto" (default): prefer the TFT panel on SBCs, window elsewhere.
+    if resolve_fb_present(cfg):
+        return "panel"
+    return "window"
 
 
 def get_panel_cfg(cfg: dict) -> dict:

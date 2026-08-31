@@ -238,15 +238,69 @@ class LCDDisplay(BaseDisplay):
             self._device.clear()
 
 
+class FBDisplay(BaseDisplay):
+    """Drive the TFT framebuffer panel (FbdevPanel) from voice-assistant states.
+
+    Wraps the same pure-Python /dev/fb0 panel used by 'desk --panel' so the
+    face animation renders on the SBC TFT while the voice assistant runs.
+    """
+
+    def __init__(self, cfg: dict):
+        from tanu.desktop.fbdev_panel import FbdevPanel
+        from tanu.desktop.panel import get_panel_cfg
+
+        panel_cfg = get_panel_cfg(cfg)
+        self._panel = FbdevPanel(panel_cfg)
+        self._panel.set_connected(True)
+        self._panel.set_status("Say hey Tanu")
+        self._panel.start()
+        LOG.info("[Display] fbdev panel display initialized")
+
+    def show_idle(self) -> None:
+        self._panel.set_state("idle")
+        self._panel.set_status("Say hey Tanu")
+
+    def show_partial(self, text: str) -> None:
+        self._panel.set_state("thinking")
+        self._panel.set_response(text)
+
+    def show_listening(self, rms: float = 0.5) -> None:
+        self._panel.set_state("listening")
+        self._panel.set_status("Listening...")
+
+    def show_thinking(self) -> None:
+        self._panel.set_state("thinking")
+        self._panel.set_status("Thinking...")
+
+    def show_speaking(self) -> None:
+        self._panel.set_state("speaking")
+        self._panel.set_status("Speaking...")
+
+    def show_error(self, msg: str) -> None:
+        self._panel.set_state("error")
+        self._panel.set_status(msg or "Error")
+
+    def close(self) -> None:
+        self._panel.close()
+
+
 def init_display(cfg: dict) -> BaseDisplay:
-    """Initialize display based on config."""
-    display_type = cfg.get("deskbot", {}).get("display_type", "none")
-    if display_type == "none":
-        return NullDisplay()
-    elif display_type == "st7789":
-        return LCDDisplay(cfg.get("deskbot", {}))
-    else:
-        LOG.warning(
-            f"[Display] Unknown display_type: {display_type}, using NullDisplay"
-        )
-        return NullDisplay()
+    """Initialize display based on config.
+
+    - "fbdev" (or auto-detect: a panel framebuffer is present) -> TFT panel.
+    - "st7789" -> luma.lcd ST7789.
+    - "none" (default) -> NullDisplay.
+    """
+    from tanu.desktop.panel import resolve_fb_present
+
+    dc = cfg.get("deskbot", {}) or {}
+    display_type = dc.get("display_type", "auto")
+    if display_type == "fbdev":
+        return FBDisplay(cfg)
+    if display_type == "st7789":
+        return LCDDisplay(dc)
+    if display_type == "auto" and resolve_fb_present(cfg):
+        return FBDisplay(cfg)
+    if display_type != "none" and display_type != "auto":
+        LOG.warning(f"[Display] Unknown display_type: {display_type}, using NullDisplay")
+    return NullDisplay()

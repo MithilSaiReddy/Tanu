@@ -42,6 +42,7 @@ def get_deskbot_config(cfg: dict) -> dict:
         "moonshine_arch":   2,
         "piper_bin":        str(assets / "piper" / "piper"),
         "piper_model":      str(assets / "piper" / "voices" / "en_US-lessac-medium.onnx"),
+        "display_type":     "auto",
     }
 
     dc = dict(cfg.get("deskbot", {}))
@@ -108,7 +109,7 @@ DEFAULT_CONFIG = {
     },
     "tool_paths": [],
     "ui": {
-        "display": "window",
+        "display": "auto",
         "panel": {
             "device": "/dev/fb0",
             "width": 320,

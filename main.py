@@ -324,7 +324,10 @@ def main():
     if args.command in cmds:
         cmds[args.command](args)
     else:
-        parser.print_help()
+        # No subcommand = the normal run: voice assistant in simulate mode
+        # (type text, Tanu speaks it) with the display auto-set to the TFT.
+        default = argparse.Namespace(simulate=True, text_mode=False)
+        cmd_tanu(default)
 
 
 if __name__ == "__main__":
