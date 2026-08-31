@@ -103,10 +103,10 @@ Most Armbian/mainline kernels ship the `fbtft` staging drivers. Create
             ili9341: ili9341@0 {
                 compatible = "ilitek,ili9341";
                 reg = <0>;
-                spi-max-frequency = <32000000>;
+                spi-max-frequency = <64000000>;
                 rotate = <90>;
                 bgr;
-                fps = <30>;
+                fps = <60>;
                 buswidth = <8>;
                 dc-gpios = <&pio 1 3 0>;    /* PB3 - change me */
                 reset-gpios = <&pio 1 2 0>; /* PB2 - change me */
@@ -130,6 +130,31 @@ ls -l /dev/fb0
 If your image doesn't have `armbian-add-overlay`, compile with
 `dtc -@ -I dts -O dtb -o ili9341-fb.dtbo ili9341-fb.dts` and add an
 `overlays=` entry referencing it in boot config (image-specific).
+
+#### Hitting a smooth 60 fps (important)
+
+`fps = <60>` alone does **not** guarantee 60 frames/second. The visible
+refresh rate is capped by the SPI bus bandwidth: a full 320x240 RGB565
+frame is 153,600 bytes = 1,228,800 bits, so
+
+- 32 MHz SPI  → ~26 fps (default — this is why it looks slow)
+- 64 MHz SPI  → ~38–48 fps
+- ~73.7 MHz   → ~60 fps (physical max for full-frame updates)
+
+`fps` only tells the driver how often to *attempt* a redraw; the data still
+has to cross the SPI bus. To make the panel actually smooth, tune **both**
+`spi-max-frequency` and `fps` (the example above uses 64 MHz / 60):
+
+1. Apply the overlay and reboot, then confirm the driver accepted the clock:
+   `dmesg | grep -i ili9341`.
+2. If the panel "scrambles" / shows rainbow noise, back the SPI clock down a
+   step (e.g. `<50000000>` then `<40000000>`) — the max stable rate is board
+   and panel dependent. A solid 40–50 fps already looks far smoother than 26.
+3. Raise `ui.panel.speed` in `~/.tanu/config.json` (see §1) so the face motion
+   moves fast enough to be noticed at the higher refresh rate.
+
+Note: display refresh smooths each *screen update*; `ui.panel.speed` controls
+how fast the *face animates* — the two are independent. Tune both.
 
 ### Option B — panel-mipi-dbi-spi (mainline DRM)
 
